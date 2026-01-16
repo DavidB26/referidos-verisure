@@ -1,130 +1,208 @@
 "use client";
 
-import { Modal } from "@/components/ui/Modal";
+import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
-import { Button } from "@/components/ui/Button";
-import { pushDataLayer } from "@/lib/gtm";
 
-import { z } from "zod";
-import { useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
-import React, { useMemo, useState } from "react";
+// Ajusta el import según tu proyecto:
+import { Modal } from "@/components/ui/Modal"; 
 
-const schema = z.object({
-  email: z.string().email("Ingresa un correo válido"),
-  consent: z.boolean().refine((v) => v === true, "Debes aceptar para continuar"),
-});
-
-type FormValues = z.infer<typeof schema>;
-
-export function AccessByEmailModal({
-  open,
-  onClose,
-  source = "header",
-}: {
+type Props = {
   open: boolean;
   onClose: () => void;
-  source?: "header" | "form" | "sticky";
-}) {
-  const [status, setStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
-  const [errorMsg, setErrorMsg] = useState<string>("");
+  source?: string; // para tracking (opcional)
+};
 
-  const defaultValues = useMemo<FormValues>(() => ({ email: "", consent: false }), []);
+function isValidEmail(email: string) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email.trim());
+}
 
-  const {
-    register,
-    handleSubmit,
-    formState: { errors },
-    reset,
-  } = useForm<FormValues>({
-    resolver: zodResolver(schema),
-    defaultValues,
-  });
+export default function AccessByEmailModal({ open, onClose, source }: Props) {
+  const router = useRouter();
 
-  function closeAll() {
-    onClose();
-    setStatus("idle");
-    setErrorMsg("");
-    reset(defaultValues);
-  }
+  const [step, setStep] = useState<"email" | "otp">("email");
+  const [email, setEmail] = useState("");
+  const [otp, setOtp] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+  const [cooldown, setCooldown] = useState(0);
 
-  const onSubmit = async (values: FormValues) => {
-    setStatus("loading");
-    setErrorMsg("");
-    pushDataLayer("referrals_magiclink_submit", { source });
+  // Reset cuando se abre/cierra
+  useEffect(() => {
+    if (!open) return;
+    setStep("email");
+    setEmail("");
+    setOtp("");
+    setMsg(null);
+    setCooldown(0);
+  }, [open]);
 
+  useEffect(() => {
+    if (cooldown <= 0) return;
+    const t = setInterval(() => setCooldown((c) => Math.max(0, c - 1)), 1000);
+    return () => clearInterval(t);
+  }, [cooldown]);
+
+  const emailNorm = useMemo(() => email.trim().toLowerCase(), [email]);
+  const otpClean = useMemo(() => otp.replace(/\D/g, "").slice(0, 6), [otp]);
+
+  const sendOtp = async () => {
+    setMsg(null);
+    if (!isValidEmail(emailNorm)) {
+      setMsg("Ingresa un correo válido.");
+      return;
+    }
+
+    setLoading(true);
     try {
       const { error } = await supabase.auth.signInWithOtp({
-        email: values.email,
-        options: {
-          // Asegúrate de tener esta URL permitida en Supabase Auth → URL Configuration
-         emailRedirectTo: `${window.location.origin}/auth/callback?next=/referidos/app`
-        },
+        email: emailNorm,
+        options: { shouldCreateUser: true }, // ✅ cualquiera puede entrar
       });
 
-      if (error) throw error;
+      if (error) {
+        setMsg(error.message);
+        return;
+      }
 
-      setStatus("success");
-      pushDataLayer("referrals_magiclink_success", { source });
-    } catch (e) {
-      setStatus("error");
-      const message = e instanceof Error ? e.message : "No pudimos enviar el link. Intenta nuevamente.";
-      setErrorMsg(message);
-      pushDataLayer("referrals_magiclink_error", { source });
+      setStep("otp");
+      setCooldown(30);
+      setMsg("Te enviamos un código de 6 dígitos. Revisa tu correo.");
+    } finally {
+      setLoading(false);
     }
   };
 
+  const verifyOtp = async () => {
+    setMsg(null);
+    if (otpClean.length !== 6) {
+      setMsg("El código debe tener 6 dígitos.");
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const { data, error } = await supabase.auth.verifyOtp({
+        email: emailNorm,
+        token: otpClean,
+        type: "email",
+      });
+
+      if (error) {
+        setMsg(error.message.includes("expired") ? "El código expiró. Pide uno nuevo." : error.message);
+        return;
+      }
+
+      if (data?.session) {
+        onClose(); // cierra modal
+        router.replace("/referidos/app");
+        return;
+      }
+
+      setMsg("No se pudo iniciar sesión. Intenta nuevamente.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (!open) return null;
+
   return (
-    <Modal open={open} onClose={closeAll} title="Genera tu link / Accede con correo">
-      {status !== "success" ? (
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-900">Correo</label>
+    <Modal open={open} onClose={onClose} title="Accede con correo">
+    <div className="px-2 sm:px-4">
+      <p className="text-sm text-gray-500 mb-6">
+        Te enviaremos un código de 6 dígitos para ingresar.
+      </p>
+  
+      {step === "email" ? (
+        <div className="space-y-4">
+          <div className="space-y-2">
+            <label className="text-sm font-medium text-gray-700">Correo</label>
+  
             <input
-              type="email"
-              placeholder="tuemail@correo.com"
-              className="mt-1 w-full rounded-xl border border-gray-200 px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-red-200"
-              {...register("email")}
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="tucorreo@gmail.com"
+              autoComplete="email"
+              className="w-full rounded-xl border border-gray-200 px-4 py-3 outline-none focus:border-red-400 focus:ring-2 focus:ring-red-100"
             />
-            {errors.email?.message && (
-              <p className="mt-1 text-xs text-red-600">{errors.email.message}</p>
-            )}
+  
+            <div className="text-xs text-gray-500">
+              Usa un correo válido (te llegará el código en segundos).
+            </div>
           </div>
-
-          <label className="flex items-start gap-2 text-xs text-gray-600">
-            <input type="checkbox" className="mt-1" {...register("consent")} />
-            <span>
-              Acepto que Verisure me contacte y confirmo haber leído los términos y condiciones.
-            </span>
-          </label>
-          {errors.consent?.message && (
-            <p className="-mt-2 text-xs text-red-600">{errors.consent.message}</p>
-          )}
-
-          <Button type="submit" className="w-full" disabled={status === "loading"}>
-            {status === "loading" ? "Enviando..." : "Enviar link de acceso"}
-          </Button>
-
-          {status === "error" && (
-            <p className="text-sm text-red-600">{errorMsg}</p>
-          )}
-
-          <p className="text-center text-xs text-gray-500">Toma menos de un minuto.</p>
-        </form>
+  
+          <button
+            disabled={loading}
+            onClick={sendOtp}
+            className="w-full rounded-xl bg-red-600 px-4 py-3 font-semibold text-white hover:bg-red-700 disabled:opacity-60 disabled:cursor-not-allowed"
+          >
+            {loading ? "Enviando..." : "Enviar código"}
+          </button>
+        </div>
       ) : (
-        <div className="space-y-3">
-          <div className="rounded-2xl border border-gray-100 bg-gray-50 p-4">
-            <p className="text-sm font-semibold text-gray-900">¡Listo!</p>
-            <p className="mt-1 text-sm text-gray-600">
-              Te enviamos un correo con tu link de acceso. Revisa también Promociones/Spam.
-            </p>
+        <div className="space-y-4">
+          <div className="rounded-xl border border-gray-200 bg-gray-50 px-4 py-3">
+            <div className="text-xs text-gray-500">Enviamos el código a</div>
+            <div className="text-sm font-medium text-gray-900">{emailNorm}</div>
           </div>
-
-          <Button className="w-full" onClick={closeAll}>
-            Entendido
-          </Button>
+  
+          <div className="space-y-2">
+            <label className="text-sm font-medium text-gray-700">
+              Código de verificación
+            </label>
+  
+            <input
+              value={otpClean}
+              onChange={(e) => setOtp(e.target.value)}
+              inputMode="numeric"
+              autoComplete="one-time-code"
+              placeholder="123456"
+              className="w-full tracking-[0.35em] text-center text-lg rounded-xl border border-gray-200 px-4 py-3 outline-none focus:border-red-400 focus:ring-2 focus:ring-red-100"
+            />
+  
+            <div className="flex items-center justify-between text-xs text-gray-500">
+              <span>6 dígitos</span>
+              <button
+                disabled={loading || cooldown > 0}
+                onClick={sendOtp}
+                className="text-red-600 hover:text-red-700 disabled:opacity-60 disabled:cursor-not-allowed"
+                type="button"
+              >
+                {cooldown > 0 ? `Reenviar en ${cooldown}s` : "Reenviar código"}
+              </button>
+            </div>
+          </div>
+  
+          <button
+            disabled={loading || otpClean.length !== 6}
+            onClick={verifyOtp}
+            className="w-full rounded-xl bg-red-600 px-4 py-3 font-semibold text-white hover:bg-red-700 disabled:opacity-60 disabled:cursor-not-allowed"
+          >
+            {loading ? "Verificando..." : "Verificar y entrar"}
+          </button>
+  
+          <button
+            disabled={loading}
+            onClick={() => {
+              setStep("email");
+              setOtp("");
+              setMsg(null);
+            }}
+            className="w-full rounded-xl border border-gray-200 px-4 py-3 font-semibold text-gray-800 hover:bg-gray-50 disabled:opacity-60 disabled:cursor-not-allowed"
+            type="button"
+          >
+            Cambiar correo
+          </button>
         </div>
       )}
-    </Modal>
+  
+      {msg && (
+        <div className="mt-5 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          {msg}
+        </div>
+      )}
+    </div>
+  </Modal>
   );
 }

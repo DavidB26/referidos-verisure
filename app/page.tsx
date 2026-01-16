@@ -3,7 +3,7 @@
 import Image from "next/image";
 import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/Button";
-import { AccessByEmailModal } from "@/components/AccessByEmailModal";
+import AccessByEmailModal from "@/components/AccessByEmailModal";
 import { pushDataLayer } from "@/lib/gtm";
 import { supabase } from "@/lib/supabase";
 import { Check, HelpCircle, Mail, Phone, User, Shield, ClipboardList } from "lucide-react";

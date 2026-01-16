@@ -26,6 +26,17 @@ export default function AuthCallback() {
       const tokenHash = params.get("token_hash");
       const type = params.get("type"); // magiclink / recovery / invite
 
+      // If Supabase redirected back with an auth error (e.g. otp_expired), send user to home to request a new link.
+      const err = params.get("error");
+      const errCode = params.get("error_code");
+      const errDesc = params.get("error_description");
+      if (err || errCode) {
+        console.warn("Supabase auth error in callback:", { err, errCode, errDesc });
+        const reason = encodeURIComponent(errCode || err || "auth_error");
+        router.replace(`/?login=1&reason=${reason}`);
+        return;
+      }
+
       // 1) PKCE flow (most common)
       if (code) {
         const { error } = await supabase.auth.exchangeCodeForSession(code);
