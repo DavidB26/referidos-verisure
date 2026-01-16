@@ -29,15 +29,31 @@ export default function AuthCallback() {
       // 1) PKCE flow (most common)
       if (code) {
         const { error } = await supabase.auth.exchangeCodeForSession(code);
-        if (!error) {
-          for (let i = 0; i < 10; i++) {
-            const { data } = await supabase.auth.getSession();
-            if (data?.session) break;
-            await sleep(150);
+
+        if (error) {
+          console.error("exchangeCodeForSession error:", error);
+        }
+
+        // Espera a que la sesión exista de verdad (incluso si hubo error, por si ya quedó guardada)
+        let hasSession = false;
+        for (let i = 0; i < 10; i++) {
+          const { data } = await supabase.auth.getSession();
+          if (data?.session) {
+            hasSession = true;
+            break;
           }
+          await sleep(150);
+        }
+
+        if (hasSession) {
           router.replace(safeNext);
           return;
         }
+
+        // Si falló el intercambio, normalmente es porque el link se abrió en otro dominio/navegador
+        // (PKCE code_verifier no existe). Devuelve al home para reintentar.
+        router.replace(`/?login=1&reason=${encodeURIComponent(error?.message || "missing_session")}`);
+        return;
       }
 
       // 2) Verify token_hash flow (sometimes used)
@@ -73,7 +89,7 @@ export default function AuthCallback() {
       }
 
       // fallback
-      router.replace("/?login=1");
+      router.replace("/?login=1&reason=callback_no_session");
     })();
   }, [params, router]);
 
