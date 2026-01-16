@@ -13,9 +13,14 @@ export default function AuthCallback() {
   const params = useSearchParams();
 
   useEffect(() => {
+    console.log("CALLBACK URL:", window.location.href);
+    console.log("code:", params.get("code"));
+    console.log("next:", params.get("next"));
     (async () => {
       const nextParam = params.get("next");
-      const safeNext = nextParam?.startsWith("/") ? nextParam : "/referidos/app";
+      const safeNext = nextParam?.startsWith("/")
+        ? nextParam
+        : "/referidos/app";
 
       const code = params.get("code");
       const tokenHash = params.get("token_hash");
@@ -58,7 +63,9 @@ export default function AuthCallback() {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const authAny: any = supabase.auth as any;
       if (typeof authAny.getSessionFromUrl === "function") {
-        const { data, error } = await authAny.getSessionFromUrl({ storeSession: true });
+        const { data, error } = await authAny.getSessionFromUrl({
+          storeSession: true,
+        });
         if (!error && data?.session) {
           router.replace(safeNext);
           return;
