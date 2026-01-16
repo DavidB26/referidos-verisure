@@ -58,7 +58,7 @@ export function AccessByEmailModal({
         email: values.email,
         options: {
           // Asegúrate de tener esta URL permitida en Supabase Auth → URL Configuration
-          emailRedirectTo: `${origin}/auth/callback?next=/referidos/app`,
+         emailRedirectTo: `${window.location.origin}/auth/callback?next=/referidos/app`
         },
       });
 
