@@ -13,40 +13,21 @@ export default function AuthCallback() {
   const params = useSearchParams();
 
   useEffect(() => {
-    const nextParam = params.get("next");
-    const safeNext = nextParam?.startsWith("/") ? nextParam : "/referidos/app";
-
     (async () => {
-      const code = params.get("code");
+      const nextParam = params.get("next");
+      const safeNext = nextParam?.startsWith("/") ? nextParam : "/referidos/app";
 
+      const code = params.get("code");
+      const tokenHash = params.get("token_hash");
+      const type = params.get("type"); // magiclink / recovery / invite
+
+      // 1) PKCE flow (most common)
       if (code) {
         const { error } = await supabase.auth.exchangeCodeForSession(code);
-        if (error) {
-          router.replace("/?login=1");
-          return;
-        }
-
-        // ✅ Espera a que la sesión exista de verdad
-        for (let i = 0; i < 10; i++) {
-          const { data } = await supabase.auth.getSession();
-          if (data?.session) break;
-          await sleep(150);
-        }
-
-        router.replace(safeNext);
-        return;
-      }
-
-      // hash/implicit fallback
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const authAny: any = supabase.auth as any;
-      if (typeof authAny.getSessionFromUrl === "function") {
-        const { data, error } = await authAny.getSessionFromUrl({ storeSession: true });
-        if (!error && data?.session) {
-          // mismo "confirm"
+        if (!error) {
           for (let i = 0; i < 10; i++) {
-            const { data: s } = await supabase.auth.getSession();
-            if (s?.session) break;
+            const { data } = await supabase.auth.getSession();
+            if (data?.session) break;
             await sleep(150);
           }
           router.replace(safeNext);
@@ -54,6 +35,37 @@ export default function AuthCallback() {
         }
       }
 
+      // 2) Verify token_hash flow (sometimes used)
+      if (tokenHash && type) {
+        // verifyOtp is supported for magiclink/recovery depending on template
+        const { error } = await supabase.auth.verifyOtp({
+          type: type as any,
+          token_hash: tokenHash,
+        });
+
+        if (!error) {
+          for (let i = 0; i < 10; i++) {
+            const { data } = await supabase.auth.getSession();
+            if (data?.session) break;
+            await sleep(150);
+          }
+          router.replace(safeNext);
+          return;
+        }
+      }
+
+      // 3) Hash in URL (#access_token=...)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const authAny: any = supabase.auth as any;
+      if (typeof authAny.getSessionFromUrl === "function") {
+        const { data, error } = await authAny.getSessionFromUrl({ storeSession: true });
+        if (!error && data?.session) {
+          router.replace(safeNext);
+          return;
+        }
+      }
+
+      // fallback
       router.replace("/?login=1");
     })();
   }, [params, router]);
