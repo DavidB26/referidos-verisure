@@ -4,70 +4,59 @@ import { useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 
-export default function AuthCallbackPage() {
+function sleep(ms: number) {
+  return new Promise((r) => setTimeout(r, ms));
+}
+
+export default function AuthCallback() {
   const router = useRouter();
   const params = useSearchParams();
 
   useEffect(() => {
     const nextParam = params.get("next");
-    const safeNext =
-      nextParam && nextParam.startsWith("/") ? nextParam : "/referidos/app";
+    const safeNext = nextParam?.startsWith("/") ? nextParam : "/referidos/app";
 
-    const run = async () => {
-      try {
-        // 1) PKCE (?code=...)
-        const code = params.get("code");
-        if (code) {
-          const { error } = await supabase.auth.exchangeCodeForSession(code);
-          if (error) {
-            router.replace(
-              `/admin/login?error=${encodeURIComponent(error.message)}`
-            );
-            return;
-          }
-          router.replace(safeNext);
+    (async () => {
+      const code = params.get("code");
+
+      if (code) {
+        const { error } = await supabase.auth.exchangeCodeForSession(code);
+        if (error) {
+          router.replace("/?login=1");
           return;
         }
 
-        // 2) Implicit/hash (#access_token=...)
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const authAny: any = supabase.auth as any;
-        if (typeof authAny.getSessionFromUrl === "function") {
-          const { data, error } = await authAny.getSessionFromUrl({
-            storeSession: true,
-          });
-          if (error) {
-            router.replace(
-              `/admin/login?error=${encodeURIComponent(error.message)}`
-            );
-            return;
-          }
-          if (data?.session) {
-            router.replace(safeNext);
-            return;
-          }
+        // ✅ Espera a que la sesión exista de verdad
+        for (let i = 0; i < 10; i++) {
+          const { data } = await supabase.auth.getSession();
+          if (data?.session) break;
+          await sleep(150);
         }
 
-        // 3) Si ya hay sesión, continúa
-        const { data } = await supabase.auth.getSession();
-        if (data?.session) {
-          router.replace(safeNext);
-          return;
-        }
-
-        router.replace("/admin/login?error=missing_code");
-      } catch (e) {
-        const msg = e instanceof Error ? e.message : "unexpected";
-        router.replace(`/admin/login?error=${encodeURIComponent(msg)}`);
+        router.replace(safeNext);
+        return;
       }
-    };
 
-    run();
+      // hash/implicit fallback
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const authAny: any = supabase.auth as any;
+      if (typeof authAny.getSessionFromUrl === "function") {
+        const { data, error } = await authAny.getSessionFromUrl({ storeSession: true });
+        if (!error && data?.session) {
+          // mismo "confirm"
+          for (let i = 0; i < 10; i++) {
+            const { data: s } = await supabase.auth.getSession();
+            if (s?.session) break;
+            await sleep(150);
+          }
+          router.replace(safeNext);
+          return;
+        }
+      }
+
+      router.replace("/?login=1");
+    })();
   }, [params, router]);
 
-  return (
-    <main style={{ padding: 24 }}>
-      Validando sesión…
-    </main>
-  );
+  return <div style={{ padding: 24 }}>Validando sesión…</div>;
 }
