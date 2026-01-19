@@ -5,25 +5,32 @@ import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import AccessByEmailModal from "@/components/AccessByEmailModal";
 import { pushDataLayer } from "@/lib/gtm";
-import { supabase } from "@/lib/supabase";
-import { Check, HelpCircle, Mail, Phone, User, Shield, ClipboardList } from "lucide-react";
+import { Check, HelpCircle, Mail, User, Shield, ClipboardList } from "lucide-react";
 
 const faqs = [
   {
+    q: "¿Necesito ingresar para registrar un referido?",
+    a: "Sí. Por seguridad, el registro de referidos se realiza únicamente dentro del portal y requiere validar tu acceso con un código enviado a tu correo.",
+  },
+  {
     q: "¿Qué recibe mi referido?",
-    a: "Tu referido recibirá un correo informativo indicando que fue referido y que el equipo de Verisure se pondrá en contacto (según campaña vigente).",
+    a: "Tu referido recibirá un mensaje informativo indicando que fue referido y que el equipo de Verisure se pondrá en contacto (según campaña vigente).",
   },
   {
-    q: "¿Necesito crear una cuenta para referir?",
-    a: "No es obligatorio. Puedes registrar a tu referido dejando tu correo. Si ingresas, podrás ver el estado de tus referidos en tu portal.",
+    q: "¿Se envía correo al referido?",
+    a: "No. En el nuevo flujo la notificación al referido se realiza vía mensaje (por definir: SMS/WhatsApp) para acelerar el contacto y reducir fricción.",
   },
   {
-    q: "¿Cuándo se acredita el beneficio/puntos?",
-    a: "Si existe beneficio o puntos, se acreditan una vez confirmado el contrato del referido (según reglas del programa).",
+    q: "¿Qué datos necesito para registrar un referido?",
+    a: "Los datos pueden variar por campaña, pero normalmente solicitamos nombre, DNI y teléfono. El correo del referido puede ser opcional.",
   },
   {
     q: "¿Qué pasa si el referido ya había cotizado antes?",
     a: "Podría no ser válido. Revisa los términos y condiciones del programa.",
+  },
+  {
+    q: "¿Cuándo se acredita el beneficio/puntos?",
+    a: "Si existe beneficio o puntos, se acreditan una vez confirmado el contrato del referido (según reglas del programa).",
   },
 ];
 
@@ -36,15 +43,6 @@ export default function Page() {
   const [openLogin, setOpenLogin] = useState(false);
   const [loginSource, setLoginSource] = useState<"header" | "form" | "sticky">("header");
 
-  // Form state (stub MVP – luego conectamos a API)
-  const [referrerEmail, setReferrerEmail] = useState("");
-  const [referredName, setReferredName] = useState("");
-  const [referredEmail, setReferredEmail] = useState("");
-  const [referredPhone, setReferredPhone] = useState("");
-  const [consent, setConsent] = useState(false);
-
-  const [submitState, setSubmitState] = useState<"idle" | "loading" | "success" | "error">("idle");
-  const [submitError, setSubmitError] = useState("");
 
   useEffect(() => {
     pushDataLayer("referrals_view", { page: "landing_register" });
@@ -55,15 +53,6 @@ export default function Page() {
     setLoginSource(source);
     setOpenLogin(true);
     pushDataLayer("referrals_login_open", { source });
-  }
-
-  function scrollToRegister() {
-    document.getElementById("registro")?.scrollIntoView({ behavior: "smooth" });
-    pushDataLayer("referrals_register_scroll", { from: "hero" });
-  }
-
-  function validateEmail(email: string) {
-    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
   }
 
   function saveTrackingFromUrl() {
@@ -136,85 +125,6 @@ export default function Page() {
     };
   }
 
-  async function onSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    setSubmitError("");
-
-    if (!validateEmail(referrerEmail)) {
-      setSubmitState("error");
-      setSubmitError("Ingresa tu correo (referidor) válido.");
-      return;
-    }
-
-    if (!referredName.trim()) {
-      setSubmitState("error");
-      setSubmitError("Ingresa el nombre del referido.");
-      return;
-    }
-
-    if (!validateEmail(referredEmail)) {
-      setSubmitState("error");
-      setSubmitError("Ingresa el correo del referido válido.");
-      return;
-    }
-
-    if (!referredPhone.trim()) {
-      setSubmitState("error");
-      setSubmitError("Ingresa el teléfono del referido.");
-      return;
-    }
-
-    if (!consent) {
-      setSubmitState("error");
-      setSubmitError("Debes confirmar que cuentas con autorización del referido para compartir sus datos.");
-      return;
-    }
-
-    setSubmitState("loading");
-    pushDataLayer("referrals_register_submit", {
-      referrer_email: referrerEmail,
-      referred_email: referredEmail,
-    });
-
-    try {
-      // ✅ Guardar en BD y enviar correo informativo al referido
-      const { data: sessionData } = await supabase.auth.getSession();
-      const accessToken = sessionData.session?.access_token ?? null;
-
-      const res = await fetch("/api/referrals/create", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          referrerEmail,
-          referredName,
-          referredEmail,
-          referredPhone,
-          consent,
-          accessToken,
-          ...getTrackingPayload(),
-        }),
-      });
-
-      const json = await res.json();
-
-      if (!res.ok || !json.ok) {
-        throw new Error(json.message || "No pudimos registrar el referido.");
-      }
-
-      setSubmitState("success");
-      pushDataLayer("referrals_register_success", {});
-
-      // Reset fields (opcional)
-      setReferredName("");
-      setReferredEmail("");
-      setReferredPhone("");
-      setConsent(false);
-    } catch (err) {
-      setSubmitState("error");
-      setSubmitError(err instanceof Error ? err.message : "No pudimos registrar el referido. Intenta nuevamente.");
-      pushDataLayer("referrals_register_error", {});
-    }
-  }
 
   return (
     <main className="min-h-screen bg-white">
@@ -233,7 +143,6 @@ export default function Page() {
           </div>
 
           <nav className="hidden items-center gap-6 text-sm text-gray-600 md:flex">
-            <a href="#registro" className="hover:text-gray-900">Registrar</a>
             <a href="#como-funciona" className="hover:text-gray-900">Cómo funciona</a>
             <a href="#beneficios" className="hover:text-gray-900">Beneficios</a>
             <a href="#preguntas" className="hover:text-gray-900">Preguntas</a>
@@ -272,7 +181,7 @@ export default function Page() {
             </ul>
 
             <div className="mt-8 flex flex-col gap-3 sm:flex-row animate-fade-up-delay-2">
-              <Button onClick={scrollToRegister}>Registrar referido</Button>
+              <Button onClick={() => openLoginModal("form")}>Ingresar y registrar</Button>
               <Button variant="secondary" onClick={() => openLoginModal("header")}>
                 Ya tengo cuenta
               </Button>
@@ -326,126 +235,63 @@ export default function Page() {
         </div>
       </section>
 
-      {/* Registro */}
-      <section id="registro" className="scroll-mt-28 md:scroll-mt-24 border-t border-gray-100 bg-white">
+      {/* Acceso (sin formulario en home) */}
+      <section id="acceso" className="scroll-mt-28 md:scroll-mt-24 border-t border-gray-100 bg-white">
         <div className="mx-auto max-w-6xl px-4 py-14">
           <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
             <div>
-              <h2 className="text-2xl font-bold text-gray-900">Registrar un referido</h2>
+              <h2 className="text-2xl font-bold text-gray-900">Accede para registrar referidos</h2>
               <p className="mt-2 text-sm text-gray-600">
-                Completa los datos y enviaremos un correo informativo al referido.
+                Por seguridad, el registro de referidos se realiza solo dentro de tu portal. Ingresa con tu correo y listo.
               </p>
             </div>
 
             <div className="rounded-2xl border border-gray-100 bg-gray-50 p-4">
-              <p className="text-xs text-gray-600">
-                ¿Quieres llevar control de tus referidos?
-              </p>
+              <p className="text-xs text-gray-600">¿Listo para empezar?</p>
               <Button className="mt-2 w-full" variant="secondary" onClick={() => openLoginModal("form")}>
-                Ingresar
+                Ingresar con correo
               </Button>
             </div>
           </div>
 
-          <form onSubmit={onSubmit} className="mt-8 grid grid-cols-1 gap-4 rounded-3xl border border-gray-100 bg-gray-50 p-6 md:grid-cols-2">
-            {/* Referrer email */}
-            <div className="md:col-span-2">
-              <label className="block text-sm font-semibold text-gray-900">Tu correo (referidor)</label>
-              <div className="mt-1 flex items-center gap-2 rounded-2xl border border-gray-200 bg-white px-4 py-3">
-                <Mail size={18} className="text-gray-400" />
-                <input
-                  value={referrerEmail}
-                  onChange={(e) => setReferrerEmail(e.target.value)}
-                  type="email"
-                  placeholder="tuemail@correo.com"
-                  className="w-full bg-transparent text-sm outline-none"
-                />
+          <div className="mt-8 grid grid-cols-1 gap-4 md:grid-cols-3">
+            {[{
+              title: "1) Ingresa con código",
+              desc: "Te enviamos un código OTP a tu correo para validar tu acceso.",
+              icon: <Mail />,
+            }, {
+              title: "2) Completa tus datos una sola vez",
+              desc: "Nombre, DNI y si tienes Verisure (se guarda para tus próximos ingresos).",
+              icon: <User />,
+            }, {
+              title: "3) Registra y haz seguimiento",
+              desc: "Desde tu portal podrás registrar referidos y ver su estado en el proceso.",
+              icon: <ClipboardList />,
+            }].map((c) => (
+              <div key={c.title} className="rounded-2xl border border-gray-100 bg-white p-6 shadow-sm">
+                <div className="inline-flex rounded-xl bg-gray-50 p-3 text-gray-700">{c.icon}</div>
+                <h3 className="mt-4 text-base font-semibold text-gray-900">{c.title}</h3>
+                <p className="mt-2 text-sm text-gray-600">{c.desc}</p>
+              </div>
+            ))}
+          </div>
+
+          <div className="mt-8 rounded-3xl border border-gray-100 bg-gray-50 p-6">
+            <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+              <div>
+                <p className="text-sm font-semibold text-gray-900">¿Quieres registrar un referido ahora?</p>
+                <p className="mt-1 text-sm text-gray-600">Ingresa y te llevamos directo a tu portal.</p>
+              </div>
+              <div className="flex gap-2">
+                <Button onClick={() => openLoginModal("form")}>Ingresar</Button>
+                <Button variant="secondary" onClick={() => document.getElementById("como-funciona")?.scrollIntoView({ behavior: "smooth" })}>
+                  Ver cómo funciona
+                </Button>
               </div>
             </div>
+          </div>
 
-            {/* Referred name */}
-            <div>
-              <label className="block text-sm font-semibold text-gray-900">Nombre del referido</label>
-              <div className="mt-1 flex items-center gap-2 rounded-2xl border border-gray-200 bg-white px-4 py-3">
-                <User size={18} className="text-gray-400" />
-                <input
-                  value={referredName}
-                  onChange={(e) => setReferredName(e.target.value)}
-                  type="text"
-                  placeholder="Nombre y apellido"
-                  className="w-full bg-transparent text-sm outline-none"
-                />
-              </div>
-            </div>
-
-            {/* Referred phone */}
-            <div>
-              <label className="block text-sm font-semibold text-gray-900">Teléfono del referido</label>
-              <div className="mt-1 flex items-center gap-2 rounded-2xl border border-gray-200 bg-white px-4 py-3">
-                <Phone size={18} className="text-gray-400" />
-                <input
-                  value={referredPhone}
-                  onChange={(e) => setReferredPhone(e.target.value)}
-                  type="tel"
-                  placeholder="Ej: 999 999 999"
-                  className="w-full bg-transparent text-sm outline-none"
-                />
-              </div>
-            </div>
-
-            {/* Referred email */}
-            <div className="md:col-span-2">
-              <label className="block text-sm font-semibold text-gray-900">Correo del referido</label>
-              <div className="mt-1 flex items-center gap-2 rounded-2xl border border-gray-200 bg-white px-4 py-3">
-                <Mail size={18} className="text-gray-400" />
-                <input
-                  value={referredEmail}
-                  onChange={(e) => setReferredEmail(e.target.value)}
-                  type="email"
-                  placeholder="referido@correo.com"
-                  className="w-full bg-transparent text-sm outline-none"
-                />
-              </div>
-            </div>
-
-            {/* Consent */}
-            <div className="md:col-span-2">
-              <label className="flex items-start gap-2 text-xs text-gray-600">
-                <input
-                  type="checkbox"
-                  checked={consent}
-                  onChange={(e) => setConsent(e.target.checked)}
-                  className="mt-1"
-                />
-                <span>
-                  Confirmo que cuento con autorización del referido para compartir sus datos y que Verisure pueda contactarlo.
-                </span>
-              </label>
-            </div>
-
-            {/* Submit */}
-            <div className="md:col-span-2">
-              <Button className="w-full" disabled={submitState === "loading"}>
-                {submitState === "loading" ? "Registrando..." : "Registrar referido"}
-              </Button>
-
-              {submitState === "success" && (
-                <div className="mt-4 rounded-2xl border border-green-200 bg-green-50 p-4 text-sm text-green-800">
-                  ¡Listo! Tu referido fue registrado. Le enviaremos un correo informativo y Verisure lo contactará.
-                </div>
-              )}
-
-              {submitState === "error" && (
-                <div className="mt-4 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
-                  {submitError}
-                </div>
-              )}
-
-              <p className="mt-3 text-xs text-gray-500">
-                *Aplican términos y condiciones del programa.
-              </p>
-            </div>
-          </form>
+          <p className="mt-4 text-xs text-gray-500">*Aplican términos y condiciones del programa.</p>
         </div>
       </section>
 
@@ -463,7 +309,7 @@ export default function Page() {
                 icon: <User />,
               },
               {
-                title: "Enviamos un correo informativo",
+                title: "Enviamos un mensaje informativo",
                 desc: "Tu referido recibe un aviso indicando que fue referido.",
                 icon: <Mail />,
               },
@@ -501,7 +347,7 @@ export default function Page() {
                 <div className="rounded-2xl bg-gray-50 p-4">
                   <p className="text-sm font-semibold text-gray-900">Para tu referido</p>
                   <p className="mt-1 text-sm text-gray-600">
-                    Recibe un correo informativo y es contactado por el equipo de Verisure para continuar la atención.
+                    Recibe un mensaje informativo y es contactado por el equipo de Verisure para continuar la atención.
                   </p>
                 </div>
               </div>
@@ -574,8 +420,8 @@ export default function Page() {
       <div className="fixed bottom-4 left-0 right-0 z-40 mx-auto w-full max-w-6xl px-4 md:hidden">
         <div className="rounded-2xl border border-gray-100 bg-white p-3 shadow-lg">
           <div className="grid grid-cols-2 gap-2">
-            <Button onClick={() => document.getElementById("registro")?.scrollIntoView({ behavior: "smooth" })}>
-              Registrar
+            <Button onClick={() => document.getElementById("acceso")?.scrollIntoView({ behavior: "smooth" })}>
+              Acceder
             </Button>
             <Button variant="secondary" onClick={() => openLoginModal("sticky")}>Ingresar</Button>
           </div>

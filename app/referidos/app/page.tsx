@@ -21,11 +21,17 @@ type ReferralRow = {
   referrer_user_id: string | null;
   referrer_email: string | null;
   referred_name: string;
-  referred_email: string;
   referred_phone: string;
+  referred_email?: string | null;
   consent: boolean;
   status: "registered" | "contacted" | "quoted" | "contracted" | "invalid";
   notes: string | null;
+};
+
+type ReferrerProfile = {
+  id: string;
+  full_name: string | null;
+  has_verisure: boolean | null;
 };
 
 const statusUi: Record<
@@ -60,6 +66,7 @@ const statusUi: Record<
 };
 
 const TRACKING_KEY = "ref_tracking_v1";
+const REGISTER_COOLDOWN_MS = 5 * 60 * 1000; // 5 minutes
 
 
 function formatDate(iso: string) {
@@ -68,8 +75,6 @@ function formatDate(iso: string) {
     year: "numeric",
     month: "2-digit",
     day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
   });
 }
 
@@ -79,6 +84,14 @@ export default function ReferralsPortalPage() {
   const [email, setEmail] = useState<string | null>(null);
   const [rows, setRows] = useState<ReferralRow[]>([]);
   const [error, setError] = useState<string | null>(null);
+
+  const [profile, setProfile] = useState<ReferrerProfile | null>(null);
+  const [profileLoading, setProfileLoading] = useState(false);
+
+  const [registerStep, setRegisterStep] = useState<"profile" | "referral">("profile");
+  const [profileName, setProfileName] = useState("");
+  const [profileHasVerisure, setProfileHasVerisure] = useState<boolean | null>(null);
+  const [profileErrors, setProfileErrors] = useState<{ name?: string; hasVerisure?: string }>({});
 
   const [openRegister, setOpenRegister] = useState(false);
   const [referredName, setReferredName] = useState("");
@@ -90,6 +103,26 @@ export default function ReferralsPortalPage() {
   const [fieldErrors, setFieldErrors] = useState<{ name?: string; email?: string; phone?: string; consent?: string }>({});
 
   const total = useMemo(() => rows.length, [rows.length]);
+
+  // Cooldown logic
+  const lastCreatedAt = rows[0]?.created_at ? new Date(rows[0].created_at).getTime() : null;
+  const [nowTs, setNowTs] = useState(() => Date.now());
+
+  const cooldownRemainingMs = useMemo(() => {
+    if (!lastCreatedAt) return 0;
+    const elapsed = nowTs - lastCreatedAt;
+    const remaining = REGISTER_COOLDOWN_MS - elapsed;
+    return remaining > 0 ? remaining : 0;
+  }, [lastCreatedAt, nowTs]);
+
+  const isInCooldown = cooldownRemainingMs > 0;
+
+  function formatCooldown(ms: number) {
+    const totalSec = Math.ceil(ms / 1000);
+    const m = Math.floor(totalSec / 60);
+    const s = totalSec % 60;
+    return `${m}:${String(s).padStart(2, "0")}`;
+  }
 
   async function load() {
     setError(null);
@@ -107,6 +140,27 @@ export default function ReferralsPortalPage() {
     }
 
     setEmail(user.email ?? null);
+
+    // Cargar perfil del usuario (para pedir datos 1 sola vez)
+    try {
+      setProfileLoading(true);
+      const { data: prof, error: profErr } = await supabase
+        .from("profiles")
+        .select("id, full_name, has_verisure")
+        .eq("id", user.id)
+        .maybeSingle();
+
+      if (!profErr) {
+        const p = (prof ?? { id: user.id, full_name: null, has_verisure: null }) as ReferrerProfile;
+        setProfile(p);
+
+        // Prellenar estados (por si el usuario reabre el modal)
+        setProfileName(p.full_name ?? "");
+        setProfileHasVerisure(typeof p.has_verisure === "boolean" ? p.has_verisure : null);
+      }
+    } finally {
+      setProfileLoading(false);
+    }
 
     // Reclamar referidos creados sin login (guardados con referrer_email)
     // para que aparezcan en el portal al iniciar sesión.
@@ -148,13 +202,18 @@ export default function ReferralsPortalPage() {
     load();
     saveTrackingFromUrl();
 
-
     // Si cambia la sesión (login/logout), recargamos
     const { data: sub } = supabase.auth.onAuthStateChange(() => {
       load();
     });
 
+    // Timer for cooldown
+    const t = window.setInterval(() => {
+      setNowTs(Date.now());
+    }, 1000);
+
     return () => {
+      window.clearInterval(t);
       sub.subscription.unsubscribe();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -172,10 +231,20 @@ export default function ReferralsPortalPage() {
     setSubmitState("idle");
     setSubmitError("");
     setFieldErrors({});
+    setRegisterStep("profile");
+    setProfileErrors({});
+    // no reseteamos profileName/profileHasVerisure aquí si ya existen en DB; se prellenan desde `profile`.
   }
 
   function openRegisterModal() {
+    if (isInCooldown) return;
     resetRegisterForm();
+    const needsProfile = !profile?.full_name || typeof profile?.has_verisure !== "boolean";
+    setRegisterStep(needsProfile ? "profile" : "referral");
+    // prellenar por si ya existe parcialmente
+    setProfileName(profile?.full_name ?? "");
+    setProfileHasVerisure(typeof profile?.has_verisure === "boolean" ? profile.has_verisure : null);
+    setProfileErrors({});
     setOpenRegister(true);
   }
 
@@ -202,6 +271,7 @@ function normalizePhone(val: string) {
   // Keep digits only (PE mobile: 9 digits)
   return val.replace(/\D/g, "").slice(0, 9);
 }
+
 
 function saveTrackingFromUrl() {
   if (typeof window === "undefined") return;
@@ -269,16 +339,20 @@ function getTrackingPayload() {
 }
 
   function validateRegisterFields() {
-    const errors: { name?: string; email?: string; phone?: string; consent?: string } = {};
+    const errors: { name?: string; dni?: string; email?: string; phone?: string; consent?: string } = {};
 
     if (!referredName.trim()) errors.name = "El nombre es obligatorio.";
 
-    const emailNorm = normalizeEmail(referredEmail);
-    if (!emailNorm) errors.email = "El correo es obligatorio.";
-    else if (!isEmail(emailNorm)) errors.email = "Ingresa un correo válido.";
+    // Correo opcional: solo validamos si el usuario escribió algo
+    const emailRaw = referredEmail.trim();
+    const emailNorm = emailRaw ? normalizeEmail(emailRaw) : "";
 
-    // Duplicados (client-side, usando lo ya cargado en la tabla)
-    if (emailNorm && rows.some((r) => normalizeEmail(r.referred_email) === emailNorm)) {
+    if (emailRaw && !isEmail(emailNorm)) {
+      errors.email = "Ingresa un correo válido.";
+    }
+
+    // Duplicados por correo (client-side) - solo si se ingresó correo
+    if (emailNorm && rows.some((r) => normalizeEmail(r.referred_email ?? "") === emailNorm)) {
       errors.email = "Este correo ya fue registrado.";
     }
 
@@ -298,6 +372,56 @@ function getTrackingPayload() {
 
     setFieldErrors(errors);
     return Object.keys(errors).length === 0;
+  }
+
+  function validateProfileFields() {
+    const errors: { name?: string; hasVerisure?: string } = {};
+
+    if (!profileName.trim()) errors.name = "Tu nombre es obligatorio.";
+
+    if (profileHasVerisure === null) errors.hasVerisure = "Selecciona una opción.";
+
+    setProfileErrors(errors);
+    return Object.keys(errors).length === 0;
+  }
+
+  async function saveProfileAndContinue() {
+    setSubmitError("");
+    const ok = validateProfileFields();
+    if (!ok) {
+      setSubmitState("error");
+      return;
+    }
+
+    setSubmitState("loading");
+
+    try {
+      const { data: userData } = await supabase.auth.getUser();
+      const user = userData?.user;
+      if (!user) throw new Error("Tu sesión expiró. Vuelve a ingresar.");
+
+      const payload = {
+        id: user.id,
+        full_name: profileName.trim(),
+        has_verisure: profileHasVerisure,
+        updated_at: new Date().toISOString(),
+      };
+
+      const { data: up, error: upErr } = await supabase
+        .from("profiles")
+        .upsert(payload, { onConflict: "id" })
+        .select("id, full_name, has_verisure")
+        .single();
+
+      if (upErr) throw new Error(upErr.message);
+
+      setProfile(up as ReferrerProfile);
+      setRegisterStep("referral");
+      setSubmitState("idle");
+    } catch (err) {
+      setSubmitState("error");
+      setSubmitError(err instanceof Error ? err.message : "Error guardando tus datos.");
+    }
   }
 
   async function submitRegister(e: React.FormEvent) {
@@ -325,7 +449,7 @@ function getTrackingPayload() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           referredName: referredName.trim(),
-          referredEmail: normalizeEmail(referredEmail),
+          referredEmail: referredEmail.trim() ? normalizeEmail(referredEmail) : null,
           referredPhone: normalizePhone(referredPhone),
           consent,
           accessToken,
@@ -335,6 +459,9 @@ function getTrackingPayload() {
 
       const json = await res.json();
       if (!res.ok || !json.ok) {
+        if (res.status === 429) {
+          throw new Error(json.message || "Por seguridad, espera unos minutos e intenta nuevamente.");
+        }
         throw new Error(json.message || "No pudimos registrar el referido.");
       }
 
@@ -416,9 +543,14 @@ function getTrackingPayload() {
             <button
               type="button"
               onClick={openRegisterModal}
-              className="inline-flex items-center justify-center rounded-xl px-5 py-3 text-sm font-semibold bg-brand text-white shadow-sm hover:opacity-95 active:scale-[0.99] transition-all"
+              disabled={isInCooldown}
+              className={`inline-flex items-center justify-center rounded-xl px-5 py-3 text-sm font-semibold shadow-sm transition-all ${
+                isInCooldown
+                  ? "bg-gray-300 text-gray-700 cursor-not-allowed"
+                  : "bg-brand text-white hover:opacity-95 active:scale-[0.99]"
+              }`}
             >
-              Registrar nuevo referido
+              {isInCooldown ? `Espera ${formatCooldown(cooldownRemainingMs)}` : "Registrar nuevo referido"}
             </button>
           </div>
         </div>
@@ -431,7 +563,7 @@ function getTrackingPayload() {
                 <p className="font-semibold">No has iniciado sesión</p>
                 <p className="mt-1 text-amber-800">
                   Para ver el estado de tus referidos necesitas ingresar con tu
-                  correo (magic link) desde la landing.
+                  correo (código OTP) desde la landing.
                 </p>
               </div>
             </div>
@@ -497,15 +629,18 @@ function getTrackingPayload() {
                           </p>
                           <div className="mt-2 grid grid-cols-1 gap-2 text-xs text-gray-600 sm:grid-cols-2">
                             <p className="inline-flex items-center gap-2">
-                              <Mail size={14} className="text-gray-400" />
-                              {r.referred_email}
-                            </p>
-                            <p className="inline-flex items-center gap-2">
                               <Phone size={14} className="text-gray-400" />
                               {r.referred_phone}
                             </p>
-                            <p className="sm:col-span-2 text-gray-500">
-                              Registrado: {formatDate(r.created_at)}
+                            {r.referred_email && (
+                              <p className="inline-flex items-center gap-2">
+                                <Mail size={14} className="text-gray-400" />
+                                {r.referred_email}
+                              </p>
+                            )}
+                            <p className="sm:col-span-2 inline-flex items-center gap-2 text-gray-500">
+                              <Clock size={14} className="text-gray-400" />
+                              <span>{formatDate(r.created_at)}</span>
                             </p>
                           </div>
                         </div>
@@ -545,7 +680,9 @@ function getTrackingPayload() {
               <div>
                 <h3 className="text-lg font-bold text-gray-900">Registrar referido</h3>
                 <p className="mt-1 text-sm text-gray-600">
-                  Estás logueado, así que no necesitamos tu correo. Solo completa los datos del referido.
+                  {registerStep === "profile"
+                    ? "Primero completa tus datos (solo una vez). Luego podrás registrar referidos."
+                    : "Completa los datos del referido para registrarlo en el programa."}
                 </p>
               </div>
               <button
@@ -557,131 +694,222 @@ function getTrackingPayload() {
                 ✕
               </button>
             </div>
-
-            <form onSubmit={submitRegister} className="mt-5 space-y-4">
-              <div>
-                <label className="block text-sm font-semibold text-gray-900">Nombre del referido</label>
-                <input
-                  value={referredName}
-                  onChange={(e) => {
-                    setReferredName(e.target.value);
-                    if (fieldErrors.name) setFieldErrors((p) => ({ ...p, name: undefined }));
-                  }}
-                  onBlur={validateRegisterFields}
-                  aria-invalid={!!fieldErrors.name}
-                  type="text"
-                  placeholder="Nombre y apellido"
-                  className={`mt-1 w-full rounded-2xl border bg-white px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-red-200 ${
-                    fieldErrors.name ? "border-red-300" : "border-gray-200"
-                  }`}
-                />
-                {fieldErrors.name && (
-                  <p className="mt-1 text-xs text-red-600">{fieldErrors.name}</p>
-                )}
+            {isInCooldown && (
+              <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                <p className="font-semibold">Por seguridad, espera antes de registrar otro referido.</p>
+                <p className="mt-1 text-amber-800">
+                  Podrás registrar un nuevo referido en <span className="font-semibold">{formatCooldown(cooldownRemainingMs)}</span>.
+                </p>
               </div>
+            )}
 
-              <div>
-                <label className="block text-sm font-semibold text-gray-900">Correo del referido</label>
-                <input
-                  value={referredEmail}
-                  onChange={(e) => {
-                    setReferredEmail(e.target.value);
-                    if (fieldErrors.email) setFieldErrors((p) => ({ ...p, email: undefined }));
-                  }}
-                  onBlur={() => {
-                    // normalize on blur
-                    setReferredEmail((prev) => normalizeEmail(prev));
-                    validateRegisterFields();
-                  }}
-                  autoCapitalize="none"
-                  autoCorrect="off"
-                  spellCheck={false}
-                  aria-invalid={!!fieldErrors.email}
-                  type="email"
-                  placeholder="referido@correo.com"
-                  className={`mt-1 w-full rounded-2xl border bg-white px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-red-200 ${
-                    fieldErrors.email ? "border-red-300" : "border-gray-200"
-                  }`}
-                />
-                {fieldErrors.email && (
-                  <p className="mt-1 text-xs text-red-600">{fieldErrors.email}</p>
-                )}
-              </div>
-
-              <div>
-                <label className="block text-sm font-semibold text-gray-900">Teléfono del referido</label>
-                <input
-                  value={referredPhone}
-                  onChange={(e) => {
-                    // digits only, max 9
-                    const digits = normalizePhone(e.target.value);
-                    setReferredPhone(digits);
-                    if (fieldErrors.phone) setFieldErrors((p) => ({ ...p, phone: undefined }));
-                  }}
-                  onBlur={validateRegisterFields}
-                  inputMode="numeric"
-                  pattern="\d{9}"
-                  maxLength={9}
-                  aria-invalid={!!fieldErrors.phone}
-                  type="tel"
-                  placeholder="Ej: 999999999"
-                  className={`mt-1 w-full rounded-2xl border bg-white px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-red-200 ${
-                    fieldErrors.phone ? "border-red-300" : "border-gray-200"
-                  }`}
-                />
-                {fieldErrors.phone && (
-                  <p className="mt-1 text-xs text-red-600">{fieldErrors.phone}</p>
-                )}
-              </div>
-
-              <label className="flex items-start gap-2 text-xs text-gray-600">
-                <input
-                  type="checkbox"
-                  checked={consent}
-                  onChange={(e) => {
-                    setConsent(e.target.checked);
-                    if (fieldErrors.consent) setFieldErrors((p) => ({ ...p, consent: undefined }));
-                  }}
-                  className="mt-1"
-                />
-                <span>
-                  Confirmo que cuento con la autorización del referido para compartir sus datos y que Verisure pueda contactarlo.
-                </span>
-              </label>
-              {fieldErrors.consent && (
-                <p className="mt-1 text-xs text-red-600">{fieldErrors.consent}</p>
-              )}
-
-              {submitError && (
-                <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-xs text-red-700">
-                  {submitError}
+            {registerStep === "profile" ? (
+              <div className="mt-5 space-y-4">
+                <div>
+                  <label className="block text-sm font-semibold text-gray-900">Tu nombre</label>
+                  <input
+                    value={profileName}
+                    onChange={(e) => {
+                      setProfileName(e.target.value);
+                      if (profileErrors.name) setProfileErrors((p) => ({ ...p, name: undefined }));
+                    }}
+                    onBlur={validateProfileFields}
+                    aria-invalid={!!profileErrors.name}
+                    type="text"
+                    placeholder="Nombre y apellido"
+                    className={`mt-1 w-full rounded-2xl border bg-white px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-red-200 ${
+                      profileErrors.name ? "border-red-300" : "border-gray-200"
+                    }`}
+                  />
+                  {profileErrors.name && <p className="mt-1 text-xs text-red-600">{profileErrors.name}</p>}
                 </div>
-              )}
 
-              {submitState === "success" && (
-                <div className="rounded-xl border border-green-200 bg-green-50 px-4 py-3 text-xs text-green-700">
-                  Referido registrado ✅
+                <div>
+                  <p className="block text-sm font-semibold text-gray-900">¿Tienes Verisure?</p>
+                  <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
+                    <label className={`flex items-center gap-2 rounded-2xl border px-4 py-3 text-sm ${
+                      profileHasVerisure === true ? "border-red-300 bg-red-50" : "border-gray-200"
+                    }`}>
+                      <input
+                        type="radio"
+                        name="has_verisure"
+                        checked={profileHasVerisure === true}
+                        onChange={() => {
+                          setProfileHasVerisure(true);
+                          if (profileErrors.hasVerisure) setProfileErrors((p) => ({ ...p, hasVerisure: undefined }));
+                        }}
+                      />
+                      Sí
+                    </label>
+                    <label className={`flex items-center gap-2 rounded-2xl border px-4 py-3 text-sm ${
+                      profileHasVerisure === false ? "border-red-300 bg-red-50" : "border-gray-200"
+                    }`}>
+                      <input
+                        type="radio"
+                        name="has_verisure"
+                        checked={profileHasVerisure === false}
+                        onChange={() => {
+                          setProfileHasVerisure(false);
+                          if (profileErrors.hasVerisure) setProfileErrors((p) => ({ ...p, hasVerisure: undefined }));
+                        }}
+                      />
+                      No
+                    </label>
+                  </div>
+                  {profileErrors.hasVerisure && (
+                    <p className="mt-1 text-xs text-red-600">{profileErrors.hasVerisure}</p>
+                  )}
                 </div>
-              )}
 
-              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                <Button type="button" variant="secondary" onClick={closeRegisterModal} disabled={submitState === "loading"}>
-                  Cancelar
-                </Button>
-                <Button
-                  type="submit"
-                  disabled={
-                    submitState === "loading" ||
-                    !referredName.trim() ||
-                    !referredEmail.trim() ||
-                    !referredPhone.trim() ||
-                    !consent
-                  }
-                >
-                  {submitState === "loading" ? "Registrando…" : "Registrar"}
-                </Button>
+                {submitError && (
+                  <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-xs text-red-700">
+                    {submitError}
+                  </div>
+                )}
+
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                  <Button type="button" variant="secondary" onClick={closeRegisterModal} disabled={submitState === "loading"}>
+                    Cancelar
+                  </Button>
+                  <Button type="button" onClick={saveProfileAndContinue} disabled={submitState === "loading"}>
+                    {submitState === "loading" ? "Guardando…" : "Continuar"}
+                  </Button>
+                </div>
               </div>
-            </form>
+            ) : (
+              <form onSubmit={submitRegister} className="mt-5 space-y-4">
+                <div>
+                  <label className="block text-sm font-semibold text-gray-900">Nombre del referido</label>
+                  <input
+                    value={referredName}
+                    onChange={(e) => {
+                      setReferredName(e.target.value);
+                      if (fieldErrors.name) setFieldErrors((p) => ({ ...p, name: undefined }));
+                    }}
+                    onBlur={validateRegisterFields}
+                    aria-invalid={!!fieldErrors.name}
+                    type="text"
+                    placeholder="Nombre y apellido"
+                    className={`mt-1 w-full rounded-2xl border bg-white px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-red-200 ${
+                      fieldErrors.name ? "border-red-300" : "border-gray-200"
+                    }`}
+                  />
+                  {fieldErrors.name && <p className="mt-1 text-xs text-red-600">{fieldErrors.name}</p>}
+                </div>
+
+                <div>
+                  <label className="block text-sm font-semibold text-gray-900">Teléfono del referido</label>
+                  <input
+                    value={referredPhone}
+                    onChange={(e) => {
+                      const digits = normalizePhone(e.target.value);
+                      setReferredPhone(digits);
+                      if (fieldErrors.phone) setFieldErrors((p) => ({ ...p, phone: undefined }));
+                    }}
+                    onBlur={validateRegisterFields}
+                    inputMode="numeric"
+                    pattern="\d{9}"
+                    maxLength={9}
+                    aria-invalid={!!fieldErrors.phone}
+                    type="tel"
+                    placeholder="Ej: 999999999"
+                    className={`mt-1 w-full rounded-2xl border bg-white px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-red-200 ${
+                      fieldErrors.phone ? "border-red-300" : "border-gray-200"
+                    }`}
+                  />
+                  {fieldErrors.phone && <p className="mt-1 text-xs text-red-600">{fieldErrors.phone}</p>}
+                </div>
+
+                <div>
+                  <label className="block text-sm font-semibold text-gray-900">Correo del referido (opcional)</label>
+                  <input
+                    value={referredEmail}
+                    onChange={(e) => {
+                      setReferredEmail(e.target.value);
+                      if (fieldErrors.email) setFieldErrors((p) => ({ ...p, email: undefined }));
+                    }}
+                    onBlur={() => {
+                      setReferredEmail((prev) => {
+                        const raw = prev.trim();
+                        return raw ? normalizeEmail(raw) : "";
+                      });
+                      validateRegisterFields();
+                    }}
+                    autoCapitalize="none"
+                    autoCorrect="off"
+                    spellCheck={false}
+                    aria-invalid={!!fieldErrors.email}
+                    type="email"
+                    placeholder="referido@correo.com"
+                    className={`mt-1 w-full rounded-2xl border bg-white px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-red-200 ${
+                      fieldErrors.email ? "border-red-300" : "border-gray-200"
+                    }`}
+                  />
+                  {fieldErrors.email && <p className="mt-1 text-xs text-red-600">{fieldErrors.email}</p>}
+                </div>
+
+                <label className="flex items-start gap-2 text-xs text-gray-600">
+                  <input
+                    type="checkbox"
+                    checked={consent}
+                    onChange={(e) => {
+                      setConsent(e.target.checked);
+                      if (fieldErrors.consent) setFieldErrors((p) => ({ ...p, consent: undefined }));
+                    }}
+                    className="mt-1"
+                  />
+                  <span>
+                    Confirmo que cuento con la autorización del referido para compartir sus datos y que Verisure pueda contactarlo.
+                  </span>
+                </label>
+                {fieldErrors.consent && <p className="mt-1 text-xs text-red-600">{fieldErrors.consent}</p>}
+
+                {submitError && (
+                  <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-xs text-red-700">
+                    {submitError}
+                  </div>
+                )}
+
+                {submitState === "success" && (
+                  <div className="rounded-xl border border-green-200 bg-green-50 px-4 py-3 text-xs text-green-700">
+                    Referido registrado ✅
+                  </div>
+                )}
+
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                  <Button type="button" variant="secondary" onClick={closeRegisterModal} disabled={submitState === "loading"}>
+                    Cancelar
+                  </Button>
+                  <Button
+                    type="submit"
+                    disabled={
+                      isInCooldown ||
+                      submitState === "loading" ||
+                      !referredName.trim() ||
+                      !referredPhone.trim() ||
+                      !consent
+                    }
+                  >
+                    {submitState === "loading" ? "Registrando…" : "Registrar"}
+                  </Button>
+                </div>
+
+                <div className="pt-2">
+                  <button
+                    type="button"
+                    className="text-xs text-gray-500 hover:text-gray-700"
+                    onClick={() => {
+                      // permitir volver a editar perfil
+                      setRegisterStep("profile");
+                      setSubmitState("idle");
+                      setSubmitError("");
+                    }}
+                  >
+                    ← Editar mis datos
+                  </button>
+                </div>
+              </form>
+            )}
           </div>
         </div>
       )}

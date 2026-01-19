@@ -2,20 +2,21 @@ import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { Resend } from "resend";
 
-function normalizeEmail(val: string) {
-  return String(val || "").trim().toLowerCase();
+const REGISTER_COOLDOWN_MS = 5 * 60 * 1000; // 5 minutes
+
+function normalizeEmail(val: unknown): string | null {
+  const v = String(val ?? "").trim().toLowerCase();
+  return v ? v : null;
 }
 
 function isEmail(val: string) {
-  const v = normalizeEmail(val);
-
   // Basic but stricter email format validation (does not guarantee the inbox exists)
-  if (!v) return false;
-  if (v.length > 254) return false;
-  if (v.includes("..")) return false;
+  if (!val) return false;
+  if (val.length > 254) return false;
+  if (val.includes("..")) return false;
 
   // local@domain.tld (tld >= 2)
-  return /^[a-z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-z0-9-]+(?:\.[a-z0-9-]+)*\.[a-z]{2,}$/i.test(v);
+  return /^[a-z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-z0-9-]+(?:\.[a-z0-9-]+)*\.[a-z]{2,}$/i.test(val);
 }
 
 function normalizePhone(val: string) {
@@ -25,6 +26,15 @@ function normalizePhone(val: string) {
 
 function isPeMobile9(val: string) {
   return /^\d{9}$/.test(normalizePhone(val));
+}
+
+function normalizeDni(val: unknown) {
+  // Keep digits only (PE DNI: 8 digits)
+  return String(val ?? "").replace(/\D/g, "").slice(0, 8);
+}
+
+function isPeDni8(val: string) {
+  return /^\d{8}$/.test(normalizeDni(val));
 }
 
 function cleanTrack(val: unknown, max = 120) {
@@ -120,7 +130,8 @@ export async function POST(req: Request) {
     if (!referredName || typeof referredName !== "string") {
       return NextResponse.json({ ok: false, message: "Nombre del referido requerido." }, { status: 400 });
     }
-    if (!referredEmail || typeof referredEmail !== "string" || !isEmail(referredEmailNorm)) {
+    // Correo del referido es OPCIONAL: solo validar si viene con valor
+    if (referredEmailNorm !== null && !isEmail(referredEmailNorm)) {
       return NextResponse.json({ ok: false, message: "Correo del referido inválido." }, { status: 400 });
     }
     if (!referredPhone || typeof referredPhone !== "string" || !isPeMobile9(referredPhoneNorm)) {
@@ -148,15 +159,49 @@ export async function POST(req: Request) {
     // Si no hay sesión válida, usamos el correo del referidor
     if (!referrer_user_id) {
       const referrerEmailNorm = normalizeEmail(referrerEmail);
-      if (!referrerEmail || typeof referrerEmail !== "string" || !isEmail(referrerEmailNorm)) {
-        return NextResponse.json({ ok: false, message: "Ingresa tu correo (referidor) válido." }, { status: 400 });
+      // referrerEmailNorm ya viene normalizado; si es null o no cumple formato, es inválido
+      if (!referrerEmailNorm || !isEmail(referrerEmailNorm)) {
+        return NextResponse.json(
+          { ok: false, message: "Ingresa tu correo (referidor) válido." },
+          { status: 400 }
+        );
       }
       final_referrer_email = referrerEmailNorm;
     }
 
+    // Cooldown anti-abuso: 1 registro cada 5 minutos por referidor
+    const since = new Date(Date.now() - REGISTER_COOLDOWN_MS).toISOString();
+
+    // Preferimos referrer_user_id si existe; si no, usamos referrer_email
+    const recentQuery = supabaseAdmin
+      .from("referrals")
+      .select("id")
+      .gte("created_at", since)
+      .limit(1);
+
+    const recentRes = referrer_user_id
+      ? await recentQuery.eq("referrer_user_id", referrer_user_id)
+      : await recentQuery.eq("referrer_email", final_referrer_email);
+
+    if (recentRes.error) {
+      return NextResponse.json(
+        { ok: false, message: "No pudimos validar seguridad del registro. Intenta nuevamente." },
+        { status: 500 }
+      );
+    }
+
+    if (Array.isArray(recentRes.data) && recentRes.data.length > 0) {
+      return NextResponse.json(
+        { ok: false, message: "Por seguridad, espera 5 minutos antes de registrar otro referido." },
+        { status: 429 }
+      );
+    }
+
     // Duplicados (server-side): evita registrar el mismo correo o teléfono más de una vez
     const [dupEmailRes, dupPhoneRes] = await Promise.all([
-      supabaseAdmin.from("referrals").select("id").eq("referred_email", referredEmailNorm).limit(1),
+      referredEmailNorm
+        ? supabaseAdmin.from("referrals").select("id").eq("referred_email", referredEmailNorm).limit(1)
+        : Promise.resolve({ data: [], error: null } as any),
       supabaseAdmin.from("referrals").select("id").eq("referred_phone", referredPhoneNorm).limit(1),
     ]);
 
@@ -227,9 +272,10 @@ if (insertError) {
       lower.includes("referrals_referred_email_uq") ||
       lower.includes("referred_email");
 
-    const isPhone =
-      lower.includes("referrals_referred_phone_uq") ||
-      lower.includes("referred_phone");
+      const isPhone =
+      lower.includes("referred_phone") ||
+      lower.includes("referred_phone_uq") ||
+      lower.includes("referred_phone_unique");
 
     const fieldMsg = isPhone
       ? "Este teléfono ya fue registrado."
@@ -295,18 +341,20 @@ if (insertError) {
     let email_sent = false;
     let internal_email_sent = false;
 
-    // 1) correo al referido
-    try {
-      await resend.emails.send({
-        from,
-        to: referredEmailNorm,
-        subject,
-        html,
-      });
-      email_sent = true;
-    } catch {
-      // No bloqueamos el registro si el envío falla
-      email_sent = false;
+    // 1) correo al referido (solo si el referido dejó correo)
+    if (referredEmailNorm) {
+      try {
+        await resend.emails.send({
+          from,
+          to: referredEmailNorm,
+          subject,
+          html,
+        });
+        email_sent = true;
+      } catch {
+        // No bloqueamos el registro si el envío falla
+        email_sent = false;
+      }
     }
 
     // 2) correo interno (más info)
@@ -319,7 +367,7 @@ if (insertError) {
             <tr><td><b>ID</b></td><td>${escapeHtml(referralId || "—")}</td></tr>
             <tr><td><b>Fecha</b></td><td>${escapeHtml(createdAt)}</td></tr>
             <tr><td><b>Referido</b></td><td>${escapeHtml(referredName.trim())}</td></tr>
-            <tr><td><b>Email referido</b></td><td>${escapeHtml(referredEmailNorm)}</td></tr>
+            <tr><td><b>Email referido</b></td><td>${escapeHtml(referredEmailNorm || "—")}</td></tr>
             <tr><td><b>Teléfono</b></td><td>${escapeHtml(referredPhoneNorm)}</td></tr>
             <tr><td><b>Referidor (email)</b></td><td>${escapeHtml(final_referrer_email || "—")}</td></tr>
             <tr><td><b>Consentimiento</b></td><td>${consent === true ? "Sí" : "No"}</td></tr>

@@ -4,17 +4,37 @@ import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { pushDataLayer } from "@/lib/gtm";
 import { supabase } from "@/lib/supabase";
-import { ClipboardList, LogOut, RefreshCcw, Search, ShieldAlert } from "lucide-react";
+import { ClipboardList, FileDown, LogOut, RefreshCcw, Search, ShieldAlert } from "lucide-react";
 
 type ReferralRow = {
   id: string;
   created_at: string;
   status: "registered" | "contacted" | "quoted" | "contracted";
+
+  // Referrer (who registers)
   referrer_email: string | null;
   referrer_user_id: string | null;
+  referrer_profile?: {
+    full_name?: string | null;
+    has_verisure?: boolean | null;
+    role?: string | null;
+  } | null;
+
+  // Referred (lead)
   referred_name: string;
-  referred_email: string;
+  referred_email?: string | null; // optional
   referred_phone: string;
+
+  // Tracking / metadata
+  notes?: string | null;
+  camp?: string | null;
+  utm_source?: string | null;
+  utm_medium?: string | null;
+  utm_campaign?: string | null;
+  utm_term?: string | null;
+  utm_content?: string | null;
+  landing_path?: string | null;
+  referer?: string | null;
 };
 
 const STATUS_LABEL: Record<ReferralRow["status"], string> = {
@@ -38,18 +58,142 @@ function formatDate(iso: string) {
       year: "numeric",
       month: "2-digit",
       day: "2-digit",
-      hour: "2-digit",
-      minute: "2-digit",
     });
   } catch {
     return iso;
   }
 }
 
+function formatYesNo(v: boolean | null | undefined) {
+  if (typeof v !== "boolean") return "—";
+  return v ? "Sí" : "No";
+}
+
+function prettyNameFallback(fullName: string | null | undefined, email: string | null | undefined) {
+  const name = (fullName || "").trim();
+  if (name) return name;
+
+  const e = (email || "").trim();
+  if (!e) return "—";
+
+  const local = e.split("@")[0] || "";
+  if (!local) return e;
+
+  // Replace separators and title-case lightly
+  const cleaned = local.replace(/[._-]+/g, " ").replace(/\s+/g, " ").trim();
+  if (!cleaned) return e;
+
+  return cleaned
+    .split(" ")
+    .map((w) => (w ? w[0].toUpperCase() + w.slice(1) : w))
+    .join(" ");
+}
+
+function fnv1a32(str: string, seed = 0x811c9dc5) {
+  let h = seed >>> 0;
+  for (let i = 0; i < str.length; i++) {
+    h ^= str.charCodeAt(i);
+    // h *= 16777619 (FNV prime) using 32-bit ops
+    h = Math.imul(h, 0x01000193) >>> 0;
+  }
+  return h >>> 0;
+}
+
+function uuidToCode15(uuid: string) {
+  const s = (uuid || "").trim();
+  if (!s) return "000000000000000";
+
+  // Two independent 32-bit hashes -> combine into a 15-digit safe integer
+  const h1 = fnv1a32(s, 0x811c9dc5);
+  const h2 = fnv1a32(s, 0x9747b28c);
+
+  // h1 up to ~4e9 -> h1 * 1e6 up to ~4e15 (still < 2^53), add 6 digits from h2
+  const codeNum = h1 * 1_000_000 + (h2 % 1_000_000);
+  return String(codeNum).padStart(15, "0");
+}
+
+function formatDateTimeForCsv(iso: string) {
+  try {
+    const d = new Date(iso);
+    return d.toLocaleString("es-PE", {
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+    });
+  } catch {
+    return iso;
+  }
+}
+
+function csvEscape(v: unknown) {
+  const s = (v ?? "").toString();
+  // Wrap in quotes and escape internal quotes
+  return `"${s.replace(/"/g, '""')}"`;
+}
+
+function buildCsv(data: ReferralRow[]) {
+  const headers = [
+    "Fecha registro",
+    "Estado",
+    "Código",
+    "Referidor",
+    "Correo referidor",
+    "¿Tiene Verisure?",
+    "Referido",
+    "Teléfono referido",
+    "Correo referido",
+    "Campaña",
+    "Landing",
+    "Notas",
+  ];
+
+  const lines: string[] = [];
+  lines.push(headers.map(csvEscape).join(","));
+
+  for (const r of data) {
+    const row = [
+      formatDateTimeForCsv(r.created_at),
+      STATUS_LABEL[r.status],
+      uuidToCode15(r.id),
+      prettyNameFallback(r.referrer_profile?.full_name ?? null, r.referrer_email),
+      r.referrer_email ?? "",
+      formatYesNo(r.referrer_profile?.has_verisure),
+      r.referred_name,
+      r.referred_phone,
+      r.referred_email ?? "",
+      r.camp ?? "",
+      r.landing_path ?? "",
+      r.notes ?? "",
+    ];
+
+    lines.push(row.map(csvEscape).join(","));
+  }
+
+  // BOM para Excel
+  return "\ufeff" + lines.join("\n");
+}
+
+function downloadTextFile(filename: string, content: string, mime = "text/csv;charset=utf-8") {
+  const blob = new Blob([content], { type: mime });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
 export default function AdminPage() {
   const [rows, setRows] = useState<ReferralRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string>("");
+
+  const [exporting, setExporting] = useState(false);
 
   const [accessState, setAccessState] = useState<"checking" | "no-session" | "no-admin" | "admin">("checking");
   const [accessToken, setAccessToken] = useState<string | null>(null);
@@ -59,7 +203,7 @@ export default function AdminPage() {
   const [status, setStatus] = useState<string>("");
 
   const [page, setPage] = useState(0);
-  const pageSize = 50;
+  const pageSize = 10;
 
   const [total, setTotal] = useState<number>(0);
   const totalPages = useMemo(() => Math.max(1, Math.ceil(total / pageSize)), [total]);
@@ -207,6 +351,69 @@ export default function AdminPage() {
     }
   }
 
+  async function handleExport() {
+    if (!accessToken) return;
+    setExporting(true);
+    setError("");
+
+    try {
+      // First request to get total
+      const base = new URLSearchParams();
+      if (q.trim()) base.set("q", q.trim());
+      if (status) base.set("status", status);
+
+      const firstRes = await fetch(`/api/admin/referrals/list?${base.toString()}&limit=1&offset=0`, {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${accessToken}`,
+        },
+      });
+      const firstJson = await firstRes.json();
+      if (!firstRes.ok || !firstJson.ok) {
+        throw new Error(firstJson.message || "No pudimos preparar la exportación.");
+      }
+
+      const totalToExport: number = firstJson.total || 0;
+      const chunk = 500;
+      const all: ReferralRow[] = [];
+
+      for (let offset = 0; offset < totalToExport; offset += chunk) {
+        const params = new URLSearchParams(base);
+        params.set("limit", String(chunk));
+        params.set("offset", String(offset));
+
+        const res = await fetch(`/api/admin/referrals/list?${params.toString()}`, {
+          method: "GET",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${accessToken}`,
+          },
+        });
+        const json = await res.json();
+        if (!res.ok || !json.ok) {
+          throw new Error(json.message || "Error exportando los referidos.");
+        }
+
+        all.push(...(json.data || []));
+      }
+
+      const csv = buildCsv(all);
+      const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-");
+      downloadTextFile(`referidos-export-${stamp}.csv`, csv);
+
+      pushDataLayer("referrals_admin_export", {
+        q: q.trim() || null,
+        status: status || null,
+        total: totalToExport,
+      });
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "No pudimos exportar.");
+    } finally {
+      setExporting(false);
+    }
+  }
+
   async function handleSignOut() {
     try {
       pushDataLayer("referrals_admin_sign_out", {});
@@ -333,6 +540,13 @@ export default function AdminPage() {
               </span>
             </Button>
 
+            <Button variant="secondary" onClick={handleExport} disabled={loading || exporting || accessState !== "admin"}>
+              <span className="inline-flex items-center gap-2">
+                <FileDown size={16} />
+                {exporting ? "Exportando..." : "Exportar"}
+              </span>
+            </Button>
+
             <Button variant="secondary" onClick={handleSignOut}>
               <span className="inline-flex items-center gap-2">
                 <LogOut size={16} />
@@ -353,7 +567,7 @@ export default function AdminPage() {
                 <input
                   value={q}
                   onChange={(e) => setQ(e.target.value)}
-                  placeholder="Nombre/correo/teléfono del referido o correo del referidor"
+                  placeholder="Nombre/teléfono del referido"
                   className="w-full bg-transparent text-sm outline-none"
                 />
               </div>
@@ -407,43 +621,55 @@ export default function AdminPage() {
               <table className="min-w-full text-left text-sm">
                 <thead className="bg-gray-50 text-xs font-semibold text-gray-600">
                   <tr>
-                    <th className="px-4 py-3">Referidor</th>
-                    <th className="px-4 py-3">Referido</th>
-                    <th className="px-4 py-3">Contacto</th>
+                    <th className="px-4 py-3">Datos del referidor</th>
+                    <th className="px-4 py-3">Datos del referido</th>
                     <th className="px-4 py-3">Estado</th>
-                    <th className="px-4 py-3">Registrado</th>
+                    <th className="px-4 py-3">Fecha de registro</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
                   {loading && rows.length === 0 ? (
                     <tr>
-                      <td className="px-4 py-6 text-gray-500" colSpan={5}>
+                      <td className="px-4 py-6 text-gray-500" colSpan={4}>
                         Cargando...
                       </td>
                     </tr>
                   ) : rows.length === 0 ? (
                     <tr>
-                      <td className="px-4 py-6 text-gray-500" colSpan={5}>
+                      <td className="px-4 py-6 text-gray-500" colSpan={4}>
                         No hay resultados.
                       </td>
                     </tr>
                   ) : (
                     rows.map((r) => (
                       <tr key={r.id} className="hover:bg-gray-50">
-                        <td className="px-4 py-4">
-                          <p className="font-medium text-gray-900">{r.referrer_email || "—"}</p>
-                          <p className="mt-1 text-xs text-gray-500">
-                            {r.referrer_user_id ? `UID: ${r.referrer_user_id}` : "Sin sesión"}
+                        <td className="px-4 py-4 align-top">
+                          <p className="text-base font-semibold text-gray-900">
+                            {prettyNameFallback(r.referrer_profile?.full_name ?? null, r.referrer_email)}
                           </p>
+                          <div className="mt-2 space-y-1 text-xs text-gray-700">
+                            <p>
+                              <span className="font-semibold text-gray-900">Correo:</span>{" "}
+                              <span className="break-all">{r.referrer_email || "—"}</span>
+                            </p>
+                            <p><span className="font-semibold text-gray-900">¿Tiene Verisure?:</span> {formatYesNo(r.referrer_profile?.has_verisure)}</p>
+                          </div>
                         </td>
-                        <td className="px-4 py-4">
-                          <p className="font-medium text-gray-900">{r.referred_name}</p>
-                          <p className="mt-1 text-xs text-gray-500">{r.referred_email}</p>
+                        <td className="px-4 py-4 align-top">
+                          <p className="text-base font-semibold text-gray-900">{r.referred_name}</p>
+                          <div className="mt-2 space-y-1 text-xs text-gray-700">
+                            <p><span className="font-semibold text-gray-900">Teléfono:</span> {r.referred_phone || "—"}</p>
+                            <p>
+                              <span className="font-semibold text-gray-900">Correo:</span>{" "}
+                              {r.referred_email ? (
+                                <span className="break-all">{r.referred_email}</span>
+                              ) : (
+                                <span className="text-gray-500">Sin correo</span>
+                              )}
+                            </p>
+                          </div>
                         </td>
-                        <td className="px-4 py-4">
-                          <p className="text-gray-900">{r.referred_phone}</p>
-                        </td>
-                        <td className="px-4 py-4">
+                        <td className="px-4 py-4 align-top">
                           <select
                             value={r.status}
                             onChange={(e) => updateStatus(r.id, e.target.value as ReferralRow["status"])}
@@ -455,9 +681,10 @@ export default function AdminPage() {
                               </option>
                             ))}
                           </select>
-                          <p className="mt-1 text-xs text-gray-500">Actual: {STATUS_LABEL[r.status]}</p>
                         </td>
-                        <td className="px-4 py-4 text-gray-700">{formatDate(r.created_at)}</td>
+                        <td className="px-4 py-4 align-top">
+                          <p className="mt-1 text-sm text-gray-700">{formatDate(r.created_at)}</p>
+                        </td>
                       </tr>
                     ))
                   )}

@@ -37,7 +37,7 @@ export async function GET(req: Request) {
     let query = supabaseAdmin
       .from("referrals")
       .select(
-        "id, created_at, status, referrer_email, referrer_user_id, referred_name, referred_email, referred_phone",
+        "id, created_at, status, referrer_email, referrer_user_id, referred_name, referred_dni, referred_email, referred_phone, consent, notes, camp, utm_source, utm_medium, utm_campaign, utm_term, utm_content, landing_path, referer",
         { count: "exact" }
       )
       .order("created_at", { ascending: false });
@@ -55,9 +55,32 @@ export async function GET(req: Request) {
 
     const { data, error, count } = await query;
 
+    // Enrich with referrer profile data (name/dni/has_verisure) for admin export/UI.
+    // We do a second query because referrals.referrer_user_id maps to profiles.id (auth uid)
+    // but there is no FK relationship configured for a nested select.
+    let enriched = data || [];
+    const referrerIds = Array.from(
+      new Set((enriched || []).map((r: any) => r.referrer_user_id).filter(Boolean))
+    );
+
+    if (referrerIds.length) {
+      const { data: profs, error: profsErr } = await supabaseAdmin
+        .from("profiles")
+        .select("id, full_name, dni, has_verisure, role")
+        .in("id", referrerIds);
+
+      if (!profsErr && profs) {
+        const map = new Map(profs.map((p: any) => [p.id, p]));
+        enriched = enriched.map((r: any) => ({
+          ...r,
+          referrer_profile: map.get(r.referrer_user_id) || null,
+        }));
+      }
+    }
+
     if (error) return NextResponse.json({ ok: false, message: "Error cargando referidos." }, { status: 500 });
 
-    return NextResponse.json({ ok: true, data: data || [], total: count || 0 });
+    return NextResponse.json({ ok: true, data: enriched, total: count || 0 });
   } catch {
     return NextResponse.json({ ok: false, message: "Error inesperado." }, { status: 500 });
   }
