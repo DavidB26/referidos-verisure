@@ -16,6 +16,7 @@ type ReferralRow = {
   referrer_user_id: string | null;
   referrer_profile?: {
     full_name?: string | null;
+    dni?: string | null;
     has_verisure?: boolean | null;
     role?: string | null;
   } | null;
@@ -141,6 +142,7 @@ function buildCsv(data: ReferralRow[]) {
     "Código",
     "Referidor",
     "Correo referidor",
+    "DNI referidor",
     "¿Tiene Verisure?",
     "Referido",
     "Teléfono referido",
@@ -160,6 +162,7 @@ function buildCsv(data: ReferralRow[]) {
       uuidToCode15(r.id),
       prettyNameFallback(r.referrer_profile?.full_name ?? null, r.referrer_email),
       r.referrer_email ?? "",
+      (r.referrer_profile?.dni ?? ""),
       formatYesNo(r.referrer_profile?.has_verisure),
       r.referred_name,
       r.referred_phone,

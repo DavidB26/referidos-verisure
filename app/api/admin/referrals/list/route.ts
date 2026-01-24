@@ -37,7 +37,7 @@ export async function GET(req: Request) {
     let query = supabaseAdmin
       .from("referrals")
       .select(
-        "id, created_at, status, referrer_email, referrer_user_id, referred_name, referred_dni, referred_email, referred_phone, consent, notes, camp, utm_source, utm_medium, utm_campaign, utm_term, utm_content, landing_path, referer",
+        "id, created_at, status, referrer_email, referrer_user_id, referred_name, referred_email, referred_phone, consent, notes, camp, utm_source, utm_medium, utm_campaign, utm_term, utm_content, landing_path, referer",
         { count: "exact" }
       )
       .order("created_at", { ascending: false });

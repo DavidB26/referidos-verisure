@@ -31,6 +31,7 @@ type ReferralRow = {
 type ReferrerProfile = {
   id: string;
   full_name: string | null;
+  dni: string | null;
   has_verisure: boolean | null;
 };
 
@@ -69,6 +70,7 @@ const TRACKING_KEY = "ref_tracking_v1";
 const REGISTER_COOLDOWN_MS = 5 * 60 * 1000; // 5 minutes
 
 
+
 function formatDate(iso: string) {
   const d = new Date(iso);
   return d.toLocaleString("es-PE", {
@@ -76,6 +78,13 @@ function formatDate(iso: string) {
     month: "2-digit",
     day: "2-digit",
   });
+}
+
+function getFirstName(fullName: string | null | undefined) {
+  const n = (fullName ?? "").trim();
+  if (!n) return "";
+  // take first token as the friendly name
+  return n.split(/\s+/)[0];
 }
 
 export default function ReferralsPortalPage() {
@@ -90,8 +99,9 @@ export default function ReferralsPortalPage() {
 
   const [registerStep, setRegisterStep] = useState<"profile" | "referral">("profile");
   const [profileName, setProfileName] = useState("");
+  const [profileDni, setProfileDni] = useState("");
   const [profileHasVerisure, setProfileHasVerisure] = useState<boolean | null>(null);
-  const [profileErrors, setProfileErrors] = useState<{ name?: string; hasVerisure?: string }>({});
+  const [profileErrors, setProfileErrors] = useState<{ name?: string; dni?: string; hasVerisure?: string }>({});
 
   const [openRegister, setOpenRegister] = useState(false);
   const [referredName, setReferredName] = useState("");
@@ -103,6 +113,9 @@ export default function ReferralsPortalPage() {
   const [fieldErrors, setFieldErrors] = useState<{ name?: string; email?: string; phone?: string; consent?: string }>({});
 
   const total = useMemo(() => rows.length, [rows.length]);
+
+  const firstName = useMemo(() => getFirstName(profile?.full_name), [profile?.full_name]);
+  const greetName = firstName || (email ? email.split("@")[0] : "");
 
   // Cooldown logic
   const lastCreatedAt = rows[0]?.created_at ? new Date(rows[0].created_at).getTime() : null;
@@ -146,16 +159,17 @@ export default function ReferralsPortalPage() {
       setProfileLoading(true);
       const { data: prof, error: profErr } = await supabase
         .from("profiles")
-        .select("id, full_name, has_verisure")
+        .select("id, full_name, dni, has_verisure")
         .eq("id", user.id)
         .maybeSingle();
 
       if (!profErr) {
-        const p = (prof ?? { id: user.id, full_name: null, has_verisure: null }) as ReferrerProfile;
+        const p = (prof ?? { id: user.id, full_name: null, dni: null, has_verisure: null }) as ReferrerProfile;
         setProfile(p);
 
         // Prellenar estados (por si el usuario reabre el modal)
         setProfileName(p.full_name ?? "");
+        setProfileDni(p.dni ?? "");
         setProfileHasVerisure(typeof p.has_verisure === "boolean" ? p.has_verisure : null);
       }
     } finally {
@@ -239,10 +253,11 @@ export default function ReferralsPortalPage() {
   function openRegisterModal() {
     if (isInCooldown) return;
     resetRegisterForm();
-    const needsProfile = !profile?.full_name || typeof profile?.has_verisure !== "boolean";
+    const needsProfile = !profile?.full_name || !profile?.dni || typeof profile?.has_verisure !== "boolean";
     setRegisterStep(needsProfile ? "profile" : "referral");
     // prellenar por si ya existe parcialmente
     setProfileName(profile?.full_name ?? "");
+    setProfileDni(profile?.dni ?? "");
     setProfileHasVerisure(typeof profile?.has_verisure === "boolean" ? profile.has_verisure : null);
     setProfileErrors({});
     setOpenRegister(true);
@@ -272,6 +287,10 @@ function normalizePhone(val: string) {
   return val.replace(/\D/g, "").slice(0, 9);
 }
 
+function normalizeDni(val: string) {
+  // Keep digits only (PE DNI: 8 digits)
+  return val.replace(/\D/g, "").slice(0, 8);
+}
 
 function saveTrackingFromUrl() {
   if (typeof window === "undefined") return;
@@ -339,7 +358,7 @@ function getTrackingPayload() {
 }
 
   function validateRegisterFields() {
-    const errors: { name?: string; dni?: string; email?: string; phone?: string; consent?: string } = {};
+    const errors: { name?: string; email?: string; phone?: string; consent?: string } = {};
 
     if (!referredName.trim()) errors.name = "El nombre es obligatorio.";
 
@@ -375,12 +394,16 @@ function getTrackingPayload() {
   }
 
   function validateProfileFields() {
-    const errors: { name?: string; hasVerisure?: string } = {};
-
+    const errors: { name?: string; dni?: string; hasVerisure?: string } = {};
+  
     if (!profileName.trim()) errors.name = "Tu nombre es obligatorio.";
-
+  
+    const dniNorm = normalizeDni(profileDni);
+    if (!dniNorm) errors.dni = "Tu DNI es obligatorio.";
+    else if (!/^\d{8}$/.test(dniNorm)) errors.dni = "Ingresa un DNI válido (8 dígitos).";
+  
     if (profileHasVerisure === null) errors.hasVerisure = "Selecciona una opción.";
-
+  
     setProfileErrors(errors);
     return Object.keys(errors).length === 0;
   }
@@ -403,6 +426,7 @@ function getTrackingPayload() {
       const payload = {
         id: user.id,
         full_name: profileName.trim(),
+        dni: normalizeDni(profileDni),
         has_verisure: profileHasVerisure,
         updated_at: new Date().toISOString(),
       };
@@ -410,7 +434,7 @@ function getTrackingPayload() {
       const { data: up, error: upErr } = await supabase
         .from("profiles")
         .upsert(payload, { onConflict: "id" })
-        .select("id, full_name, has_verisure")
+        .select("id, full_name, dni, has_verisure")
         .single();
 
       if (upErr) throw new Error(upErr.message);
@@ -527,11 +551,16 @@ function getTrackingPayload() {
       <section className="mx-auto max-w-6xl px-4 py-10">
         <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">Mis referidos</h1>
+            <h1 className="text-2xl font-bold text-gray-900">
+              {isAuthed && greetName ? `Hola, ${greetName}` : "Mis referidos"}
+            </h1>
             <p className="mt-1 text-sm text-gray-600">
               {isAuthed ? (
                 <>
                   Sesión: <span className="font-medium text-gray-900">{email}</span>
+                  <span className="block mt-1 text-xs text-gray-500">
+                    Revisa tus referidos y el estado en el que van avanzando.
+                  </span>
                 </>
               ) : (
                 "Ingresa desde la landing para ver tus referidos."
@@ -571,27 +600,64 @@ function getTrackingPayload() {
         )}
 
         {isAuthed && (
-          <div className="mt-8 grid grid-cols-1 gap-4 md:grid-cols-3">
-            <div className="rounded-2xl border border-gray-100 bg-gray-50 p-5">
-              <p className="text-xs text-gray-500">Total referidos</p>
-              <p className="mt-1 text-2xl font-bold text-gray-900">{total}</p>
+          <>
+            <div className="mt-8 grid grid-cols-1 gap-4 md:grid-cols-3">
+              <div className="rounded-2xl border border-gray-100 bg-gray-50 p-5">
+                <p className="text-xs text-gray-500">Total referidos</p>
+                <p className="mt-1 text-2xl font-bold text-gray-900">{total}</p>
+              </div>
+              <div className="rounded-2xl border border-gray-100 bg-gray-50 p-5">
+                <p className="text-xs text-gray-500">Último registro</p>
+                <p className="mt-1 text-sm font-semibold text-gray-900">
+                  {rows[0] ? statusUi[rows[0].status].label : "—"}
+                </p>
+                <p className="mt-1 text-xs text-gray-500">
+                  {rows[0] ? formatDate(rows[0].created_at) : "—"}
+                </p>
+              </div>
+              <div className="rounded-2xl border border-gray-100 bg-gray-50 p-5">
+                <p className="text-xs text-gray-500">Nota</p>
+                <p className="mt-1 text-sm text-gray-700">
+                  Los estados se actualizarán cuando el flujo comercial avance.
+                </p>
+              </div>
             </div>
-            <div className="rounded-2xl border border-gray-100 bg-gray-50 p-5">
-              <p className="text-xs text-gray-500">Último registro</p>
-              <p className="mt-1 text-sm font-semibold text-gray-900">
-                {rows[0] ? statusUi[rows[0].status].label : "—"}
-              </p>
-              <p className="mt-1 text-xs text-gray-500">
-                {rows[0] ? formatDate(rows[0].created_at) : "—"}
-              </p>
+            <div className="mt-4 rounded-2xl border border-gray-100 bg-white p-5">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <p className="text-sm font-semibold text-gray-900">Mis premios</p>
+                  <p className="mt-1 text-xs text-gray-500">
+                    {firstName ? (
+                      <>
+                        {firstName}, aquí verás tus premios disponibles cuando tus referidos avancen en el programa.
+                      </>
+                    ) : (
+                      <>Aquí verás tus premios disponibles cuando tus referidos avancen en el programa.</>
+                    )}
+                  </p>
+                </div>
+                <span className="inline-flex items-center gap-2 rounded-xl border border-gray-200 bg-gray-50 px-3 py-1 text-xs text-gray-700">
+                  Próximamente
+                </span>
+              </div>
+
+              <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-3">
+                <div className="rounded-2xl border border-gray-100 bg-gray-50 p-4">
+                  <p className="text-xs text-gray-500">Canjeables</p>
+                  <p className="mt-1 text-xl font-bold text-gray-900">0</p>
+                  <p className="mt-1 text-xs text-gray-500">Aún no tienes premios habilitados.</p>
+                </div>
+                <div className="rounded-2xl border border-gray-100 bg-gray-50 p-4 md:col-span-2">
+                  <p className="text-xs font-semibold text-gray-900">¿Cómo se habilitan?</p>
+                  <ul className="mt-2 space-y-1 text-xs text-gray-600">
+                    <li className="flex gap-2"><span className="text-gray-400">•</span><span>Tus referidos avanzan por estados: <span className="font-medium text-gray-800">Registrado → Contactado → Cotización → Contratado</span>.</span></li>
+                    <li className="flex gap-2"><span className="text-gray-400">•</span><span>Cuando un referido llegue a <span className="font-medium text-gray-800">Contratado</span>, se habilita tu premio según la campaña vigente.</span></li>
+                    <li className="flex gap-2"><span className="text-gray-400">•</span><span>El canje se activará en esta misma sección cuando el proceso esté habilitado.</span></li>
+                  </ul>
+                </div>
+              </div>
             </div>
-            <div className="rounded-2xl border border-gray-100 bg-gray-50 p-5">
-              <p className="text-xs text-gray-500">Nota</p>
-              <p className="mt-1 text-sm text-gray-700">
-                Los estados se actualizarán cuando el flujo comercial avance.
-              </p>
-            </div>
-          </div>
+          </>
         )}
 
         {error && (
@@ -678,8 +744,13 @@ function getTrackingPayload() {
           <div className="relative w-full max-w-lg rounded-3xl border border-gray-100 bg-white p-6 shadow-xl">
             <div className="flex items-start justify-between gap-4">
               <div>
-                <h3 className="text-lg font-bold text-gray-900">Registrar referido</h3>
+                <h3 className="text-lg font-bold text-gray-900">
+                  {isAuthed && greetName ? `Registrar referido — ${greetName}` : "Registrar referido"}
+                </h3>
                 <p className="mt-1 text-sm text-gray-600">
+                  {isAuthed && firstName ? (
+                    <span className="font-medium text-gray-800">Hola {firstName}. </span>
+                  ) : null}
                   {registerStep === "profile"
                     ? "Primero completa tus datos (solo una vez). Luego podrás registrar referidos."
                     : "Completa los datos del referido para registrarlo en el programa."}
@@ -723,6 +794,28 @@ function getTrackingPayload() {
                   />
                   {profileErrors.name && <p className="mt-1 text-xs text-red-600">{profileErrors.name}</p>}
                 </div>
+                <div>
+  <label className="block text-sm font-semibold text-gray-900">Tu DNI</label>
+  <input
+    value={profileDni}
+    onChange={(e) => {
+      const digits = normalizeDni(e.target.value);
+      setProfileDni(digits);
+      if (profileErrors.dni) setProfileErrors((p) => ({ ...p, dni: undefined }));
+    }}
+    onBlur={validateProfileFields}
+    inputMode="numeric"
+    pattern="\d{8}"
+    maxLength={8}
+    aria-invalid={!!profileErrors.dni}
+    type="text"
+    placeholder="Ej: 12345678"
+    className={`mt-1 w-full rounded-2xl border bg-white px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-red-200 ${
+      profileErrors.dni ? "border-red-300" : "border-gray-200"
+    }`}
+  />
+  {profileErrors.dni && <p className="mt-1 text-xs text-red-600">{profileErrors.dni}</p>}
+</div>
 
                 <div>
                   <p className="block text-sm font-semibold text-gray-900">¿Tienes Verisure?</p>
