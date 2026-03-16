@@ -18,7 +18,7 @@ export default function RootLayout({
 }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="es" className={fira.variable}>
-      <body className="font-sans">{children}</body>
+      <body>{children}</body>
     </html>
   );
 }

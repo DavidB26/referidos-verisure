@@ -4,8 +4,7 @@ import Image from "next/image";
 import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import AccessByEmailModal from "@/components/AccessByEmailModal";
-import { pushDataLayer } from "@/lib/gtm";
-import { Check, HelpCircle, Mail, User, Shield, ClipboardList } from "lucide-react";
+
 
 const faqs = [
   {
@@ -34,384 +33,479 @@ const faqs = [
   },
 ];
 
-const TRACKING_KEY = "ref_tracking_v1";
+
 
 export default function Page() {
   const year = useMemo(() => new Date().getFullYear(), []);
 
   // Login modal (opcional)
   const [openLogin, setOpenLogin] = useState(false);
-  const [loginSource, setLoginSource] = useState<"header" | "form" | "sticky">("header");
+  const [loginSource, setLoginSource] = useState<"header" | "form" | "sticky">(
+    "header"
+  );
+  const [isHeaderScrolled, setIsHeaderScrolled] = useState(false);
 
-
-  useEffect(() => {
-    pushDataLayer("referrals_view", { page: "landing_register" });
-    saveTrackingFromUrl();
-  }, []);
 
   function openLoginModal(source: "header" | "form" | "sticky") {
     setLoginSource(source);
     setOpenLogin(true);
-    pushDataLayer("referrals_login_open", { source });
   }
 
-  function saveTrackingFromUrl() {
-    if (typeof window === "undefined") return;
-  
-    const sp = new URLSearchParams(window.location.search);
-    const tracking = {
-      camp: sp.get("camp"),
-      utm_source: sp.get("utm_source"),
-      utm_medium: sp.get("utm_medium"),
-      utm_campaign: sp.get("utm_campaign"),
-      utm_term: sp.get("utm_term"),
-      utm_content: sp.get("utm_content"),
-      first_landing_path: window.location.pathname,
-      first_referer: document.referrer,
-      ts: Date.now(),
+  useEffect(() => {
+    const onScroll = () => {
+      setIsHeaderScrolled(window.scrollY > 24);
     };
-  
-    const hasAny =
-      !!tracking.camp ||
-      !!tracking.utm_source ||
-      !!tracking.utm_medium ||
-      !!tracking.utm_campaign ||
-      !!tracking.utm_term ||
-      !!tracking.utm_content;
-  
-    if (!hasAny) return;
-  
-    try {
-      localStorage.setItem(TRACKING_KEY, JSON.stringify(tracking));
-    } catch {
-      // ignore
-    }
-  }
-  
-  function getTrackingPayload() {
-    if (typeof window === "undefined") return {};
-  
-    const sp = new URLSearchParams(window.location.search);
-  
-    const fromUrl = {
-      camp: sp.get("camp"),
-      utm_source: sp.get("utm_source"),
-      utm_medium: sp.get("utm_medium"),
-      utm_campaign: sp.get("utm_campaign"),
-      utm_term: sp.get("utm_term"),
-      utm_content: sp.get("utm_content"),
-    };
-  
-    let stored: any = null;
-    try {
-      stored = JSON.parse(localStorage.getItem(TRACKING_KEY) || "null");
-    } catch {
-      stored = null;
-    }
-  
-    // prioridad: URL actual > storage
-    return {
-      camp: fromUrl.camp ?? stored?.camp ?? null,
-      utm_source: fromUrl.utm_source ?? stored?.utm_source ?? null,
-      utm_medium: fromUrl.utm_medium ?? stored?.utm_medium ?? null,
-      utm_campaign: fromUrl.utm_campaign ?? stored?.utm_campaign ?? null,
-      utm_term: fromUrl.utm_term ?? stored?.utm_term ?? null,
-      utm_content: fromUrl.utm_content ?? stored?.utm_content ?? null,
-      landing_path: window.location.pathname,
-      referer: document.referrer,
-      // primer touch opcional
-      first_landing_path: stored?.first_landing_path ?? null,
-      first_referer: stored?.first_referer ?? null,
-    };
-  }
+
+    onScroll();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
+
 
 
   return (
-    <main className="min-h-screen bg-white">
+    <main className="min-h-screen  bg-[url('/home/bg-banner-home.webp')] bg-cover bg-center  bg-no-repeat">
       {/* Header */}
-      <header className="sticky top-0 z-40 border-b border-gray-100 bg-white/90 backdrop-blur">
-        <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-4">
-          <div className="flex items-center gap-3">
+      <header
+        className={[
+          "sticky top-0 z-40 w-full transition-all duration-300",
+          isHeaderScrolled
+            ? "bg-white/95 shadow-[0_10px_30px_rgba(16,24,40,0.12)] backdrop-blur"
+            : "bg-transparent",
+        ].join(" ")}
+      >
+        <div className="mx-auto flex w-full max-w-7xl items-center justify-between gap-3 px-4 py-4 md:gap-6 md:px-6 md:py-6">
+          <div className="shrink-0">
             <Image
-              src="/logo-web.svg"
+              src={isHeaderScrolled ? "/logo-web.svg" : "/home/logo-white.webp"}
               alt="Verisure"
-              width={120}
-              height={78}
+              width={160}
+              height={60}
               priority
-              className="h-7 w-auto"
+              className="h-9 w-auto md:h-12"
             />
           </div>
 
-          <nav className="hidden items-center gap-6 text-sm text-gray-600 md:flex">
-            <a href="#como-funciona" className="hover:text-gray-900">Cómo funciona</a>
-            <a href="#beneficios" className="hover:text-gray-900">Beneficios</a>
-            <a href="#preguntas" className="hover:text-gray-900">Preguntas</a>
-          </nav>
+          <div
+            className={[
+              "hidden h-[82px] flex-1 items-stretch overflow-hidden rounded-full shadow-[0_4px_18px_rgba(22,22,22,0.12)] lg:flex",
+              isHeaderScrolled ? "bg-[#F3F3F3]" : "bg-[#F3F3F3]",
+            ].join(" ")}
+          >
+            <nav className="flex h-full items-stretch">
+              <a
+                href="#como-funciona"
+                className="flex h-full min-w-[220px] items-center justify-center px-8 text-[18px] font-extrabold text-[#4A3F42] transition hover:bg-[#ED002F] hover:text-white xl:min-w-[260px] xl:px-10 xl:text-[20px]"
+              >
+                ¿Cómo funciona?
+              </a>
 
-          <Button variant="secondary" onClick={() => openLoginModal("header")}>Ingresar</Button>
+              <a
+                href="#beneficios"
+                className="flex h-full min-w-[180px] items-center justify-center px-8 text-[18px] font-extrabold text-[#4A3F42] transition hover:bg-[#ED002F] hover:text-white xl:min-w-[210px] xl:px-10 xl:text-[20px]"
+              >
+                Beneficios
+              </a>
+
+              <a
+                href="#preguntas"
+                className="flex h-full min-w-[180px] items-center justify-center px-8 text-[18px] font-extrabold text-[#4A3F42] transition hover:bg-[#ED002F] hover:text-white xl:min-w-[210px] xl:px-10 xl:text-[20px]"
+              >
+                Preguntas
+              </a>
+            </nav>
+
+            <div className="ml-auto flex h-full items-center pr-4 xl:pr-5">
+              <button
+                type="button"
+                onClick={() => openLoginModal("header")}
+                className="inline-flex h-[56px] min-w-[220px] items-center justify-center gap-3 rounded-full bg-[#00A47C] px-6 text-[17px] font-extrabold text-white transition hover:brightness-95 xl:h-[66px] xl:min-w-[275px] xl:gap-4 xl:px-8 xl:text-[18px]"
+              >
+                <Image
+                  src="/home/icon-user.webp"
+                  alt=""
+                  width={34}
+                  height={34}
+                  className="h-7 w-7 xl:h-[34px] xl:w-[34px]"
+                />
+                <span>Ingresar</span>
+              </button>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => openLoginModal("header")}
+            className="inline-flex h-11 items-center justify-center gap-2 rounded-full bg-[#00A47C] px-4 text-sm font-extrabold text-white shadow-[0_8px_20px_rgba(0,0,0,0.18)] transition hover:brightness-95 lg:hidden"
+          >
+            <Image
+              src="/home/icon-user.webp"
+              alt=""
+              width={24}
+              height={24}
+              className="h-6 w-6"
+            />
+            <span>Ingresar</span>
+          </button>
         </div>
       </header>
 
       {/* Hero */}
-      <section className="relative overflow-hidden bg-hero">
-        <div className="mx-auto grid max-w-6xl grid-cols-1 gap-10 px-4 py-14 md:grid-cols-2 md:py-20">
+      <section className="relative overflow-hidden bg-transparent">
+        <div className="mx-auto grid max-w-[1720px] grid-cols-1 gap-8 px-4 py-10 md:grid-cols-[0.65fr_0.65fr] md:items-center md:gap-6 md:px-8 md:py-12">
           {/* Copy */}
-          <div className="animate-fade-up">
-            <h1 className="text-4xl font-extrabold tracking-tight text-gray-900 md:text-5xl">
-              Registra a tu referido <br /> y nosotros lo contactamos
-            </h1>
-            <p className="mt-4 text-base text-gray-600 md:text-lg">
-              Completa los datos del referido y recibirá un correo informativo indicando que fue referido.
-              El equipo de Verisure se pondrá en contacto para continuar la atención.
-            </p>
-
-            <ul className="mt-6 space-y-3 text-sm text-gray-700 animate-fade-up-delay-1">
-              {[
-                "Registro en menos de 1 minuto",
-                "Correo informativo para tu referido",
-                "Si ingresas, podrás ver el estado en tu portal",
-              ].map((t) => (
-                <li key={t} className="flex items-start gap-2">
-                  <span className="mt-0.5 inline-flex h-5 w-5 items-center justify-center rounded-full bg-red-50 text-brand">
-                    <Check size={14} />
-                  </span>
-                  <span>{t}</span>
-                </li>
-              ))}
-            </ul>
-
-            <div className="mt-8 flex flex-col gap-3 sm:flex-row animate-fade-up-delay-2">
-              <Button onClick={() => openLoginModal("form")}>Ingresar y registrar</Button>
-              <Button variant="secondary" onClick={() => openLoginModal("header")}>
-                Ya tengo cuenta
-              </Button>
-            </div>
+          <div className="animate-fade-up flex items-center justify-center md:justify-start">
+            <Image
+              src="/home/img-referido.webp"
+              width={1900}
+              height={980}
+              className="h-auto w-full max-w-[1180px] object-contain md:max-w-[1000px]"
+              alt="Registra a tu referido"
+              priority
+            />
           </div>
 
           {/* Preview card */}
-          <div className="relative animate-fade-up-delay-1">
-            <div className="rounded-3xl border border-gray-100 bg-white p-6 shadow-sm">
-              <div className="flex items-start justify-between">
-                <div>
-                  <p className="text-sm font-semibold text-gray-900">
-                    ¿Cómo ganas con tus referidos?
-                  </p>
-                  <p className="mt-1 text-xs text-gray-500">
-                    En 4 pasos. Rápido, simple y transparente.
-                  </p>
-                </div>
-                <span className="rounded-xl bg-gray-50 p-2 text-gray-700">
-                  <ClipboardList size={18} />
-                </span>
-              </div>
+          <div className="relative animate-fade-up-delay-1 flex justify-center md:justify-end">
+            <div className="relative flex w-full max-w-[540px] flex-col rounded-[34px] border-[4px] border-white bg-[#C7001F] px-8 pb-16 pt-10 shadow-[0_0_24px_rgba(255,255,255,0.55),0_16px_40px_rgba(120,0,22,0.42)] md:px-9 md:pb-20 md:pt-11">
+              <h2 className="text-center text-[24px] font-extrabold leading-[1.1] text-white md:text-[30px]">
+                ¿Cómo ganas con tus referidos?
+              </h2>
 
-              <div className="mt-5 space-y-3 rounded-2xl bg-gray-50 p-4">
+              <div className="mt-8 space-y-5">
                 {[
                   "1) Registras a tu referido",
                   "2) Le llega un correo informativo",
                   "3) Verisure lo contacta",
-                  "4) Si contrata, tú ganas"
+                  "4) Si contrata, tú ganas",
                 ].map((s) => (
-                  <div key={s} className="flex items-center justify-between rounded-xl bg-white p-3 text-sm border border-gray-100">
-                    <span className="text-gray-700">{s}</span>
-                    <span className="text-xs text-gray-500">—</span>
+                  <div
+                    key={s}
+                    className="flex min-h-[52px] items-center rounded-full bg-[#BC7480] px-5 text-[16px] font-extrabold leading-[1.2] text-white md:min-h-[60px] md:px-7 md:text-[20px]"
+                  >
+                    <span>{s}</span>
                   </div>
                 ))}
+              </div>
 
-                <div className="rounded-xl bg-white p-3 text-xs text-gray-600 border border-gray-100">
-                  El beneficio aplica según <strong>campaña vigente</strong>. Podrás revisar el estado si ingresas.
-                </div>
+              <p className="mt-7 px-4 text-[14px] leading-[1.35] text-white md:px-6 md:text-[17px]">
+                El beneficio aplica según{" "}
+                <strong className="font-extrabold">campaña vigente</strong>.
+                Podrás revisar el estado si ingresas.
+              </p>
 
-                <Button className="w-full" variant="secondary" onClick={() => openLoginModal("header")}>
+              <div className="absolute bottom-0 left-1/2 flex w-full -translate-x-1/2 translate-y-1/2 justify-center px-6">
+                <Button
+                  className="min-h-[60px] w-full max-w-[280px] rounded-4 bg-[#00A47C] px-6 text-[17px] font-extrabold text-white md:min-h-[70px] md:max-w-[300px] md:px-8 md:text-[20px]"
+                  onClick={() => openLoginModal("header")}
+                >
                   Ingresar y ver mi estado
                 </Button>
               </div>
             </div>
-
-            {/* decor */}
-            <div className="pointer-events-none absolute -right-8 -top-8 h-40 w-40 rounded-full bg-red-50 blur-2xl" />
-            <div className="pointer-events-none absolute -bottom-10 -left-10 h-44 w-44 rounded-full bg-gray-100 blur-2xl" />
           </div>
         </div>
       </section>
 
-      {/* Acceso (sin formulario en home) */}
-      <section id="acceso" className="scroll-mt-28 md:scroll-mt-24 border-t border-gray-100 bg-white">
+      <section
+        id="acceso"
+        className="scroll-mt-28 md:scroll-mt-24  bg-transparent"
+      >
         <div className="mx-auto max-w-6xl px-4 py-14">
-          <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-center">
             <div>
-              <h2 className="text-2xl font-bold text-gray-900">Accede para registrar referidos</h2>
-              <p className="mt-2 text-sm text-gray-600">
-                Por seguridad, el registro de referidos se realiza solo dentro de tu portal. Ingresa con tu correo y listo.
+              <h2 className="text-center text-3xl font-bold text-white md:text-4xl">
+                Accede para registrar referidos
+              </h2>
+              <p className="mt-3 text-center text-base leading-[1.35] text-white md:text-xl">
+                Por seguridad, el registro de referidos se realiza solo dentro
+                de tu portal. Ingresa con tu correo y listo.
+              </p>
+            </div>
+          </div>
+
+          <div className="mt-10 grid grid-cols-1 gap-6 md:grid-cols-3 md:gap-8">
+            {[
+              {
+                title: "Ingresa con código",
+                desc: "Te enviamos un código OTP a tu correo para validar tu acceso.",
+                image: "/home/icon-1.webp",
+                imageAlt: "Paso 1 ingresa con código",
+                step: "1.",
+              },
+              {
+                title: "Completa tus datos una sola vez",
+                desc: "Nombre, DNI y si tienes Verisure (se guarda para tus próximos ingresos).",
+                image: "/home/icon-2.webp",
+                imageAlt: "Paso 2 completa tus datos una sola vez",
+                step: "2.",
+              },
+              {
+                title: "Registra y haz seguimiento",
+                desc: "Desde tu portal podrás registrar referidos y ver su estado en el proceso.",
+                image: "/home/icon-3.webp",
+                imageAlt: "Paso 3 registra y haz seguimiento",
+                step: "3.",
+              },
+            ].map((c) => (
+              <div
+                key={c.title}
+                className="relative overflow-hidden rounded-[40px] bg-white p-[8px] shadow-[0_12px_28px_rgba(88,0,18,0.12)] md:min-h-[280px]"
+              >
+                <div className="relative h-full overflow-hidden rounded-[34px] border-[2px] border-[#ED002F] bg-white px-3 pb-3 pt-3 text-center md:px-4 md:pb-2 md:pt-2">
+                  <div className="pointer-events-none absolute inset-x-0 top-0 h-[104px] bg-[#E8E8E8] md:h-[108px]" />
+                  <div className="pointer-events-none absolute inset-x-0 top-[100px] h-px md:top-[104px]" />
+                  <div className="relative z-[1] mx-auto flex min-h-[112px] items-start justify-center md:min-h-[120px]">
+                    <div className="relative flex w-full max-w-[220px] items-start justify-center">
+                      <span className="absolute left-[20px] top-[26px] text-[58px] font-extrabold leading-none text-white [-webkit-text-stroke:3px_#ED002F] md:left-[22px] md:top-[24px] md:text-[62px]">
+                        {c.step}
+                      </span>
+
+                      <Image
+                        src={c.image}
+                        alt={c.imageAlt}
+                        width={150}
+                        height={110}
+                        className="ml-[46px] h-auto w-auto max-h-[92px] object-contain md:ml-[52px] md:max-h-[100px]"
+                      />
+                    </div>
+                  </div>
+
+                  <h3 className="relative z-[1] mx-auto mt-4 text-[21px] font-extrabold leading-[0.96] text-[#4B4043] md:mt-2 md:text-[24px]">
+                    {c.title}
+                  </h3>
+                  <p className="relative z-[1] mx-auto mt-4 max-w-[300px] text-[14px] leading-[1.32] text-[#111111] md:text-[16px]">
+                    {c.desc}
+                  </p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+
+
+      {/* Cómo funciona */}
+      <section
+        id="como-funciona"
+        className="scroll-mt-28 md:scroll-mt-24 bg-white"
+      >
+        <div className="mx-auto max-w-[1280px] px-4 py-16 md:px-8 md:py-20">
+          <div className="rounded-[44px]  px-6 py-12 text-center md:px-12 md:py-16">
+            <div className="mx-auto max-w-[760px]">
+              <p className="text-[28px] font-extrabold italic leading-[1.08] text-[#ED002F] md:text-[42px]">
+                ¿Quieres registrar un referido ahora?
+              </p>
+              <p className="mt-3 text-[22px] leading-[1.25] text-[#4B4B4B] md:text-[34px]">
+                Ingresa y te llevamos directo a tu portal.
+              </p>
+
+              <div className="mt-10 flex flex-col items-center justify-center gap-5 sm:flex-row">
+                <button
+                  type="button"
+                  onClick={() => openLoginModal("form")}
+                  className="inline-flex min-h-[60px] min-w-[250px] items-center justify-center gap-3 rounded-full bg-[#00A47C] px-6 text-[20px] font-extrabold text-white shadow-[0_8px_20px_rgba(88,84,174,0.18)] transition hover:brightness-95 md:min-h-[72px] md:min-w-[290px] md:gap-4 md:px-8 md:text-[24px]"
+                >
+                  <Image
+                    src="/home/icon-user.webp"
+                    alt=""
+                    width={34}
+                    height={34}
+                    className="h-[34px] w-[34px]"
+                  />
+                  <span>Ingresar</span>
+                </button>
+              </div>
+
+              <p className="mt-8 text-[15px] leading-[1.4] text-[#4B4B4B] md:mt-10 md:text-[20px]">
+                *Aplican términos y condiciones del programa.
               </p>
             </div>
 
-            <div className="rounded-2xl border border-gray-100 bg-gray-50 p-4">
-              <p className="text-xs text-gray-600">¿Listo para empezar?</p>
-              <Button className="mt-2 w-full" variant="secondary" onClick={() => openLoginModal("form")}>
-                Ingresar con correo
-              </Button>
+            <div className="mt-10">
+              <h2 className="text-[28px] font-extrabold italic leading-[1.08] text-[#ED002F] md:text-[42px]">
+                ¿Cómo funciona?
+              </h2>
+              <p className="mt-3 text-[22px] leading-[1.25] text-[#4B4B4B] md:text-[34px]">
+                En 3 pasos. Sin complicaciones.
+              </p>
             </div>
-          </div>
 
-          <div className="mt-8 grid grid-cols-1 gap-4 md:grid-cols-3">
-            {[{
-              title: "1) Ingresa con código",
-              desc: "Te enviamos un código OTP a tu correo para validar tu acceso.",
-              icon: <Mail />,
-            }, {
-              title: "2) Completa tus datos una sola vez",
-              desc: "Nombre, DNI y si tienes Verisure (se guarda para tus próximos ingresos).",
-              icon: <User />,
-            }, {
-              title: "3) Registra y haz seguimiento",
-              desc: "Desde tu portal podrás registrar referidos y ver su estado en el proceso.",
-              icon: <ClipboardList />,
-            }].map((c) => (
-              <div key={c.title} className="rounded-2xl border border-gray-100 bg-white p-6 shadow-sm">
-                <div className="inline-flex rounded-xl bg-gray-50 p-3 text-gray-700">{c.icon}</div>
-                <h3 className="mt-4 text-base font-semibold text-gray-900">{c.title}</h3>
-                <p className="mt-2 text-sm text-gray-600">{c.desc}</p>
-              </div>
-            ))}
-          </div>
-
-          <div className="mt-8 rounded-3xl border border-gray-100 bg-gray-50 p-6">
-            <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-              <div>
-                <p className="text-sm font-semibold text-gray-900">¿Quieres registrar un referido ahora?</p>
-                <p className="mt-1 text-sm text-gray-600">Ingresa y te llevamos directo a tu portal.</p>
-              </div>
-              <div className="flex gap-2">
-                <Button onClick={() => openLoginModal("form")}>Ingresar</Button>
-                <Button variant="secondary" onClick={() => document.getElementById("como-funciona")?.scrollIntoView({ behavior: "smooth" })}>
-                  Ver cómo funciona
-                </Button>
-              </div>
+            <div className="mt-12 grid grid-cols-1 gap-8 md:grid-cols-3 md:gap-10">
+              {[
+                {
+                  title: "Registra a tu referido",
+                  desc: "Completa los datos básicos del referido.",
+                },
+                {
+                  title: "Enviamos un mensaje informativo",
+                  desc: "Tu referido recibe un aviso indicando que fue referido.",
+                },
+                {
+                  title: "Verisure lo contacta",
+                  desc: "Un asesor se comunicará para continuar la atención.",
+                },
+              ].map((s) => (
+                <div
+                  key={s.title}
+                  className="rounded-[34px] border-[3px] border-[#ED002F] bg-white px-6 py-5 text-center"
+                >
+                  <h3 className="text-[22px] font-extrabold leading-[1.06] text-[#4B4043] md:text-[30px]">
+                    {s.title}
+                  </h3>
+                  <p className="mx-auto mt-3 max-w-[290px] text-[14px] leading-[1.35] text-[#4B4B4B] md:text-[18px]">
+                    {s.desc}
+                  </p>
+                </div>
+              ))}
             </div>
-          </div>
-
-          <p className="mt-4 text-xs text-gray-500">*Aplican términos y condiciones del programa.</p>
-        </div>
-      </section>
-
-      {/* Cómo funciona */}
-      <section id="como-funciona" className="scroll-mt-28 md:scroll-mt-24 border-t border-gray-100 bg-white">
-        <div className="mx-auto max-w-6xl px-4 py-14">
-          <h2 className="text-2xl font-bold text-gray-900">¿Cómo funciona?</h2>
-          <p className="mt-2 text-sm text-gray-600">En 3 pasos. Sin complicaciones.</p>
-
-          <div className="mt-8 grid grid-cols-1 gap-4 md:grid-cols-3">
-            {[
-              {
-                title: "Registra a tu referido",
-                desc: "Completa los datos básicos del referido.",
-                icon: <User />,
-              },
-              {
-                title: "Enviamos un mensaje informativo",
-                desc: "Tu referido recibe un aviso indicando que fue referido.",
-                icon: <Mail />,
-              },
-              {
-                title: "Verisure lo contacta",
-                desc: "Un asesor se comunicará para continuar la atención.",
-                icon: <Shield />,
-              },
-            ].map((s) => (
-              <div key={s.title} className="rounded-2xl border border-gray-100 bg-white p-6 shadow-sm">
-                <div className="inline-flex rounded-xl bg-gray-50 p-3 text-gray-700">{s.icon}</div>
-                <h3 className="mt-4 text-base font-semibold text-gray-900">{s.title}</h3>
-                <p className="mt-2 text-sm text-gray-600">{s.desc}</p>
-              </div>
-            ))}
           </div>
         </div>
       </section>
 
       {/* Beneficios */}
-      <section id="beneficios" className="scroll-mt-28 md:scroll-mt-24 border-t border-gray-100 bg-gray-50">
-        <div className="mx-auto max-w-6xl px-4 py-14">
-          <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-            <div className="rounded-2xl border border-gray-100 bg-white p-6">
-              <h2 className="text-xl font-bold text-gray-900">Beneficios</h2>
-              <p className="mt-2 text-sm text-gray-600">Un programa pensado para referir de forma simple y transparente.</p>
+      <section id="beneficios" className="scroll-mt-28 md:scroll-mt-24 bg-transparent">
+        <div className="mx-auto max-w-[1280px] px-4 py-16 md:px-8 md:py-20">
+          <div className="text-center">
+            <h2 className="text-[40px] font-extrabold leading-none text-transparent [text-shadow:none] [-webkit-text-stroke:2px_white] md:text-[72px] md:[-webkit-text-stroke:3px_white]">
+              BENEFICIOS
+            </h2>
+            <p className="mx-auto mt-4 max-w-[980px] text-[20px] leading-[1.25] text-white md:mt-6 md:text-[32px]">
+              Un programa pensado para referir de forma simple y transparente.
+            </p>
+          </div>
 
-              <div className="mt-6 grid grid-cols-1 gap-4">
-                <div className="rounded-2xl bg-gray-50 p-4">
-                  <p className="text-sm font-semibold text-gray-900">Para ti</p>
-                  <p className="mt-1 text-sm text-gray-600">
-                    Podrás llevar control de tus referidos al ingresar. Si hay puntos o beneficios, se aplican según campaña vigente.
-                  </p>
-                </div>
-                <div className="rounded-2xl bg-gray-50 p-4">
-                  <p className="text-sm font-semibold text-gray-900">Para tu referido</p>
-                  <p className="mt-1 text-sm text-gray-600">
-                    Recibe un mensaje informativo y es contactado por el equipo de Verisure para continuar la atención.
-                  </p>
-                </div>
+          <div className="mt-14 overflow-hidden rounded-[44px] bg-[#F3F3F3] px-8 py-10 md:px-12 md:py-12">
+            <div className="grid grid-cols-1 items-center gap-8 md:grid-cols-[1fr_auto_1fr] md:gap-10">
+              <div className="text-center">
+                <h3 className="text-[26px] font-extrabold leading-none text-[#4B4043] md:text-[40px]">
+                  Para ti
+                </h3>
+                <p className="mx-auto mt-4 max-w-[430px] text-[16px] leading-[1.35] text-[#111111] md:mt-5 md:text-[24px]">
+                  Podrás llevar control de tus referidos al ingresar. Si hay puntos o beneficios, se aplican según campaña vigente.
+                </p>
+              </div>
+
+              <div className="mx-auto hidden h-[130px] w-[2px] bg-[#ED002F] md:block" />
+
+              <div className="text-center">
+                <h3 className="text-[26px] font-extrabold leading-none text-[#4B4043] md:text-[40px]">
+                  Para tu referido
+                </h3>
+                <p className="mx-auto mt-4 max-w-[430px] text-[16px] leading-[1.35] text-[#111111] md:mt-5 md:text-[24px]">
+                  Recibe un mensaje informativo y es contactado por el equipo de Verisure para continuar la atención.
+                </p>
               </div>
             </div>
+          </div>
+        </div>
+      </section>
 
-            <div className="rounded-2xl border border-gray-100 bg-white p-6">
-              <h2 className="text-xl font-bold text-gray-900">Privacidad y seguridad</h2>
-              <p className="mt-2 text-sm text-gray-600">
-                Protegemos los datos y usamos el correo solo para el proceso de referidos.
-              </p>
+      <section
+        id="privacidad-seguridad"
+        className="scroll-mt-28 md:scroll-mt-24 bg-white"
+      >
+        <div className="mx-auto max-w-[1280px] px-4 py-16 md:px-8 md:py-20">
+          <div className="text-center">
+            <h2 className="text-[28px] font-extrabold italic leading-[1.08] text-[#ED002F] md:text-[42px]">
+              Privacidad y seguridad
+            </h2>
+            <p className="mx-auto mt-4 max-w-[1080px] text-[20px] leading-[1.25] text-[#4B4B4B] md:text-[34px]">
+              Protegemos los datos y usamos el correo solo para el proceso de referidos.
+            </p>
+          </div>
 
-              <div className="mt-6 space-y-3">
-                {["Datos mínimos necesarios", "Registro con autorización del referido", "Acceso seguro por correo"].map((t) => (
-                  <div key={t} className="flex items-start gap-2 rounded-2xl bg-gray-50 p-4">
-                    <span className="mt-0.5 inline-flex h-5 w-5 items-center justify-center rounded-full bg-red-50 text-brand">
-                      <Check size={14} />
-                    </span>
-                    <p className="text-sm text-gray-700">{t}</p>
-                  </div>
-                ))}
-              </div>
+          <div className="mt-10 rounded-full bg-[#E8E8E8] px-8 py-7 md:px-14 md:py-8">
+            <div className="grid grid-cols-1 gap-6 text-center md:grid-cols-3 md:gap-8">
+              {[
+                "Datos mínimos necesarios",
+                "Registro con autorización del referido",
+                "Acceso seguro por correo",
+              ].map((t) => (
+                <div key={t} className="text-[18px] font-extrabold leading-[1.2] text-[#4B4043] md:text-[28px]">
+                  {t}
+                </div>
+              ))}
             </div>
           </div>
         </div>
       </section>
 
       {/* FAQ */}
-      <section id="preguntas" className="scroll-mt-28 md:scroll-mt-24 border-t border-gray-100 bg-white">
-        <div className="mx-auto max-w-6xl px-4 py-14">
-          <h2 className="text-2xl font-bold text-gray-900">Preguntas frecuentes</h2>
-          <p className="mt-2 text-sm text-gray-600">Resolvemos lo típico antes de que preguntes 😄</p>
+      <section
+        id="preguntas"
+        className="scroll-mt-28 md:scroll-mt-24 bg-white"
+      >
+        <div className="mx-auto max-w-[1280px] px-4 py-16 md:px-8 md:py-20">
+          <div className="text-center">
+            <div className="flex flex-col items-center justify-center gap-3 md:flex-row md:gap-4">
+              <Image
+                src="/home/icon-4.webp"
+                alt="Preguntas frecuentes"
+                width={62}
+                height={62}
+                className="h-[48px] w-[48px] object-contain md:h-[62px] md:w-[62px]"
+              />
+              <h2 className="text-[28px] font-extrabold italic leading-[1.08] text-[#ED002F] md:text-[42px]">
+                Preguntas frecuentes
+              </h2>
+            </div>
+            <p className="mt-3 text-[15px] leading-[1.4] text-[#4B4B4B] md:text-[20px]">
+              Resolvemos lo típico antes de que preguntes
+            </p>
+          </div>
 
-          <div className="mt-8 space-y-3">
+          <div className="mt-10 space-y-7">
             {faqs.map((f) => (
               <details
                 key={f.q}
-                className="group rounded-2xl border border-gray-100 bg-white p-5"
-                onToggle={(e) => {
-                  const el = e.currentTarget;
-                  if (el.open) pushDataLayer("referrals_faq_open", { question: f.q });
-                }}
+                className="group rounded-[28px] bg-[#E8E8E8] px-5 py-5 md:rounded-full md:px-8 md:py-6"
               >
                 <summary className="flex cursor-pointer list-none items-center justify-between gap-4">
-                  <span className="text-sm font-semibold text-gray-900">{f.q}</span>
-                  <span className="rounded-xl bg-gray-50 p-2 text-gray-700">
-                    <HelpCircle size={18} />
+                  <span className="text-left text-[18px] font-extrabold leading-[1.2] text-[#4B4043] md:text-[28px]">
+                    {f.q}
+                  </span>
+                  <span className="shrink-0 text-[#ED002F] transition-transform duration-200 group-open:rotate-180">
+                    <svg
+                      width="32"
+                      height="20"
+                      viewBox="0 0 32 20"
+                      fill="none"
+                      xmlns="http://www.w3.org/2000/svg"
+                      aria-hidden="true"
+                      className="h-4 w-6 md:h-6 md:w-10"
+                    >
+                      <path
+                        d="M4 4L16 16L28 4"
+                        stroke="currentColor"
+                        strokeWidth="4"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
+                    </svg>
                   </span>
                 </summary>
-                <p className="mt-3 text-sm text-gray-600">{f.a}</p>
+                <p className="mt-4 text-left text-[14px] leading-[1.45] text-[#4B4B4B] md:text-[18px]">
+                  {f.a}
+                </p>
               </details>
             ))}
           </div>
-
-          <p className="mt-8 text-xs text-gray-500">*Aplican términos y condiciones del programa.</p>
         </div>
       </section>
 
       {/* Footer */}
-      <footer className="border-t border-gray-100 bg-white">
+      <footer className=" bg-white">
         <div className="mx-auto flex max-w-6xl flex-col gap-2 px-4 py-10 text-sm text-gray-600 md:flex-row md:items-center md:justify-between">
           <p>© {year} Verisure Perú</p>
           <div className="flex gap-4">
-            <a className="hover:text-gray-900" href="#">Privacidad</a>
-            <a className="hover:text-gray-900" href="#">Términos</a>
+            <a className="hover:text-gray-900" href="#">
+              Privacidad
+            </a>
+            <a className="hover:text-gray-900" href="#">
+              Términos
+            </a>
           </div>
         </div>
       </footer>
@@ -420,15 +514,30 @@ export default function Page() {
       <div className="fixed bottom-4 left-0 right-0 z-40 mx-auto w-full max-w-6xl px-4 md:hidden">
         <div className="rounded-2xl border border-gray-100 bg-white p-3 shadow-lg">
           <div className="grid grid-cols-2 gap-2">
-            <Button onClick={() => document.getElementById("acceso")?.scrollIntoView({ behavior: "smooth" })}>
+            <Button
+              onClick={() =>
+                document
+                  .getElementById("acceso")
+                  ?.scrollIntoView({ behavior: "smooth" })
+              }
+            >
               Acceder
             </Button>
-            <Button variant="secondary" onClick={() => openLoginModal("sticky")}>Ingresar</Button>
+            <Button
+              variant="secondary"
+              onClick={() => openLoginModal("sticky")}
+            >
+              Ingresar
+            </Button>
           </div>
         </div>
       </div>
 
-      <AccessByEmailModal open={openLogin} onClose={() => setOpenLogin(false)} source={loginSource} />
+      <AccessByEmailModal
+        open={openLogin}
+        onClose={() => setOpenLogin(false)}
+        source={loginSource}
+      />
     </main>
   );
 }
