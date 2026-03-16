@@ -152,7 +152,7 @@ export default function Page() {
 
       {/* Hero */}
       <section className="relative overflow-hidden bg-transparent">
-        <div className="mx-auto grid max-w-[1720px] grid-cols-1 gap-8 px-4 py-10 md:grid-cols-[0.65fr_0.65fr] md:items-center md:gap-6 md:px-8 md:py-12">
+        <div className="mx-auto grid max-w-[1720px] grid-cols-1 gap-8 px-4 py-10 md:grid-cols-[0.65fr_0.35fr] md:items-center md:gap-6 md:px-8 md:py-12">
           {/* Copy */}
           <div className="animate-fade-up flex items-center justify-center md:justify-start">
             <Image
@@ -168,9 +168,9 @@ export default function Page() {
           {/* Preview card */}
           <div className="relative animate-fade-up-delay-1 flex justify-center md:justify-end">
             <div className="relative flex w-full max-w-[540px] flex-col rounded-[34px] border-[4px] border-white bg-[#C7001F] px-8 pb-16 pt-10 shadow-[0_0_24px_rgba(255,255,255,0.55),0_16px_40px_rgba(120,0,22,0.42)] md:px-9 md:pb-20 md:pt-11">
-              <h2 className="text-center text-[24px] font-extrabold leading-[1.1] text-white md:text-[30px]">
+              <h1 className="text-center text-[24px] font-extrabold leading-[1.1] text-white md:text-[30px]">
                 ¿Cómo ganas con tus referidos?
-              </h2>
+              </h1>
 
               <div className="mt-8 space-y-5">
                 {[
