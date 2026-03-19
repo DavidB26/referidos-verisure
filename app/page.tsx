@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import AccessByEmailModal from "@/components/AccessByEmailModal";
 
@@ -44,6 +44,24 @@ export default function Page() {
     "header"
   );
   const [isHeaderScrolled, setIsHeaderScrolled] = useState(false);
+  const [openFaq, setOpenFaq] = useState<number | null>(null);
+  const faqContentRefs = useRef<(HTMLDivElement | null)[]>([]);
+
+  useEffect(() => {
+    faqContentRefs.current.forEach((el, index) => {
+      if (!el) return;
+
+      if (openFaq === index) {
+        el.style.maxHeight = `${el.scrollHeight}px`;
+        el.style.opacity = "1";
+        el.style.transform = "translateY(0px)";
+      } else {
+        el.style.maxHeight = "0px";
+        el.style.opacity = "0";
+        el.style.transform = "translateY(-6px)";
+      }
+    });
+  }, [openFaq]);
 
 
   function openLoginModal(source: "header" | "form" | "sticky") {
@@ -457,40 +475,62 @@ export default function Page() {
           </div>
 
           <div className="mt-10 space-y-7">
-            {faqs.map((f) => (
-              <details
-                key={f.q}
-                className="group rounded-[28px] bg-[#E8E8E8] px-5 py-5 md:rounded-full md:px-8 md:py-6"
-              >
-                <summary className="flex cursor-pointer list-none items-center justify-between gap-4">
-                  <span className="text-left text-[18px] font-extrabold leading-[1.2] text-[#4B4043] md:text-[28px]">
-                    {f.q}
-                  </span>
-                  <span className="shrink-0 text-[#ED002F] transition-transform duration-200 group-open:rotate-180">
-                    <svg
-                      width="32"
-                      height="20"
-                      viewBox="0 0 32 20"
-                      fill="none"
-                      xmlns="http://www.w3.org/2000/svg"
-                      aria-hidden="true"
-                      className="h-4 w-6 md:h-6 md:w-10"
+            {faqs.map((f, index) => {
+              const isOpen = openFaq === index;
+
+              return (
+                <div
+                  key={f.q}
+                  className="rounded-[28px] bg-[#E8E8E8] px-5 py-5 md:rounded-full md:px-8 md:py-6"
+                >
+                  <button
+                    type="button"
+                    onClick={() => setOpenFaq(isOpen ? null : index)}
+                    aria-expanded={isOpen}
+                    className="flex w-full items-center justify-between gap-4 text-left"
+                  >
+                    <span className="text-left text-[18px] font-extrabold leading-[1.2] text-[#4B4043] md:text-[28px]">
+                      {f.q}
+                    </span>
+                    <span
+                      className={`shrink-0 text-[#ED002F] transition-transform duration-700 ease-[cubic-bezier(0.22,1,0.36,1)] ${
+                        isOpen ? "rotate-180" : "rotate-0"
+                      }`}
                     >
-                      <path
-                        d="M4 4L16 16L28 4"
-                        stroke="currentColor"
-                        strokeWidth="4"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      />
-                    </svg>
-                  </span>
-                </summary>
-                <p className="mt-4 text-left text-[14px] leading-[1.45] text-[#4B4B4B] md:text-[18px]">
-                  {f.a}
-                </p>
-              </details>
-            ))}
+                      <svg
+                        width="32"
+                        height="20"
+                        viewBox="0 0 32 20"
+                        fill="none"
+                        xmlns="http://www.w3.org/2000/svg"
+                        aria-hidden="true"
+                        className="h-4 w-6 md:h-6 md:w-10"
+                      >
+                        <path
+                          d="M4 4L16 16L28 4"
+                          stroke="currentColor"
+                          strokeWidth="4"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        />
+                      </svg>
+                    </span>
+                  </button>
+
+                  <div
+                    ref={(el) => {
+                      faqContentRefs.current[index] = el;
+                    }}
+                    className="overflow-hidden transition-[max-height,opacity,transform] duration-700 ease-[cubic-bezier(0.22,1,0.36,1)] will-change-[max-height,opacity,transform]"
+                    style={{ maxHeight: 0, opacity: 0, transform: "translateY(-6px)" }}
+                  >
+                    <p className="mt-4 text-left text-[14px] leading-[1.45] text-[#4B4B4B] md:text-[18px]">
+                      {f.a}
+                    </p>
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </div>
       </section>
