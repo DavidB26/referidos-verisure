@@ -66,7 +66,6 @@ const statusUi: Record<
   },
 };
 
-const TRACKING_KEY = "ref_tracking_v1";
 const REGISTER_COOLDOWN_MS = 5 * 60 * 1000; // 5 minutes
 
 
@@ -214,7 +213,6 @@ export default function ReferralsPortalPage() {
 
   useEffect(() => {
     load();
-    saveTrackingFromUrl();
 
     // Si cambia la sesión (login/logout), recargamos
     const { data: sub } = supabase.auth.onAuthStateChange(() => {
@@ -292,70 +290,6 @@ function normalizeDni(val: string) {
   return val.replace(/\D/g, "").slice(0, 8);
 }
 
-function saveTrackingFromUrl() {
-  if (typeof window === "undefined") return;
-
-  const sp = new URLSearchParams(window.location.search);
-  const tracking = {
-    camp: sp.get("camp"),
-    utm_source: sp.get("utm_source"),
-    utm_medium: sp.get("utm_medium"),
-    utm_campaign: sp.get("utm_campaign"),
-    utm_term: sp.get("utm_term"),
-    utm_content: sp.get("utm_content"),
-    first_landing_path: window.location.pathname,
-    first_referer: document.referrer,
-    ts: Date.now(),
-  };
-
-  const hasAny =
-    !!tracking.camp ||
-    !!tracking.utm_source ||
-    !!tracking.utm_medium ||
-    !!tracking.utm_campaign ||
-    !!tracking.utm_term ||
-    !!tracking.utm_content;
-
-  if (!hasAny) return;
-
-  try {
-    localStorage.setItem(TRACKING_KEY, JSON.stringify(tracking));
-  } catch {}
-}
-
-function getTrackingPayload() {
-  if (typeof window === "undefined") return {};
-
-  const sp = new URLSearchParams(window.location.search);
-
-  const fromUrl = {
-    camp: sp.get("camp"),
-    utm_source: sp.get("utm_source"),
-    utm_medium: sp.get("utm_medium"),
-    utm_campaign: sp.get("utm_campaign"),
-    utm_term: sp.get("utm_term"),
-    utm_content: sp.get("utm_content"),
-  };
-
-  let stored: any = null;
-  try {
-    stored = JSON.parse(localStorage.getItem(TRACKING_KEY) || "null");
-  } catch {}
-
-  return {
-    camp: fromUrl.camp ?? stored?.camp ?? null,
-    utm_source: fromUrl.utm_source ?? stored?.utm_source ?? null,
-    utm_medium: fromUrl.utm_medium ?? stored?.utm_medium ?? null,
-    utm_campaign: fromUrl.utm_campaign ?? stored?.utm_campaign ?? null,
-    utm_term: fromUrl.utm_term ?? stored?.utm_term ?? null,
-    utm_content: fromUrl.utm_content ?? stored?.utm_content ?? null,
-    landing_path: window.location.pathname,
-    referer: document.referrer,
-    // opcional primer touch
-    first_landing_path: stored?.first_landing_path ?? null,
-    first_referer: stored?.first_referer ?? null,
-  };
-}
 
   function validateRegisterFields() {
     const errors: { name?: string; email?: string; phone?: string; consent?: string } = {};
@@ -477,7 +411,6 @@ function getTrackingPayload() {
           referredPhone: normalizePhone(referredPhone),
           consent,
           accessToken,
-          ...getTrackingPayload(),
         }),
       });
 

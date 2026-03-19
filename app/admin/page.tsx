@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/Button";
-import { pushDataLayer } from "@/lib/gtm";
 import { supabase } from "@/lib/supabase";
 import { ClipboardList, FileDown, LogOut, RefreshCcw, Search, ShieldAlert } from "lucide-react";
 
@@ -25,17 +24,6 @@ type ReferralRow = {
   referred_name: string;
   referred_email?: string | null; // optional
   referred_phone: string;
-
-  // Tracking / metadata
-  notes?: string | null;
-  camp?: string | null;
-  utm_source?: string | null;
-  utm_medium?: string | null;
-  utm_campaign?: string | null;
-  utm_term?: string | null;
-  utm_content?: string | null;
-  landing_path?: string | null;
-  referer?: string | null;
 };
 
 const STATUS_LABEL: Record<ReferralRow["status"], string> = {
@@ -147,9 +135,6 @@ function buildCsv(data: ReferralRow[]) {
     "Referido",
     "Teléfono referido",
     "Correo referido",
-    "Campaña",
-    "Landing",
-    "Notas",
   ];
 
   const lines: string[] = [];
@@ -167,9 +152,6 @@ function buildCsv(data: ReferralRow[]) {
       r.referred_name,
       r.referred_phone,
       r.referred_email ?? "",
-      r.camp ?? "",
-      r.landing_path ?? "",
-      r.notes ?? "",
     ];
 
     lines.push(row.map(csvEscape).join(","));
@@ -242,11 +224,6 @@ export default function AdminPage() {
       setRows(json.data || []);
       setTotal(json.total || 0);
 
-      pushDataLayer("referrals_admin_list", {
-        q: q.trim() || null,
-        status: status || null,
-        page: curPage,
-      });
     } catch (e) {
       setError(e instanceof Error ? e.message : "Error cargando el admin.");
       setRows([]);
@@ -347,7 +324,6 @@ export default function AdminPage() {
         throw new Error(json.message || "No pudimos actualizar el estado.");
       }
 
-      pushDataLayer("referrals_admin_update_status", { id, status: next });
     } catch (e) {
       setRows(prev);
       setError(e instanceof Error ? e.message : "No pudimos actualizar el estado.");
@@ -405,11 +381,6 @@ export default function AdminPage() {
       const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-");
       downloadTextFile(`referidos-export-${stamp}.csv`, csv);
 
-      pushDataLayer("referrals_admin_export", {
-        q: q.trim() || null,
-        status: status || null,
-        total: totalToExport,
-      });
     } catch (e) {
       setError(e instanceof Error ? e.message : "No pudimos exportar.");
     } finally {
@@ -418,10 +389,6 @@ export default function AdminPage() {
   }
 
   async function handleSignOut() {
-    try {
-      pushDataLayer("referrals_admin_sign_out", {});
-    } catch {}
-
     try {
       await supabase.auth.signOut();
     } catch {}
@@ -455,7 +422,6 @@ export default function AdminPage() {
               <Button
                 variant="secondary"
                 onClick={() => {
-                  pushDataLayer("referrals_admin_go_login", {});
                   window.location.href = "/admin/login";
                 }}
               >
@@ -487,10 +453,6 @@ export default function AdminPage() {
               <Button
                 variant="secondary"
                 onClick={async () => {
-                  try {
-                    pushDataLayer("referrals_admin_change_account", {});
-                  } catch {}
-
                   try {
                     await supabase.auth.signOut();
                   } catch {}

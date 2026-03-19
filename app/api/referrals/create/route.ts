@@ -37,12 +37,6 @@ function isPeDni8(val: string) {
   return /^\d{8}$/.test(normalizeDni(val));
 }
 
-function cleanTrack(val: unknown, max = 120) {
-  if (typeof val !== "string") return null;
-  const v = val.trim();
-  if (!v) return null;
-  return v.slice(0, max);
-}
 
 export async function POST(req: Request) {
   try {
@@ -102,30 +96,10 @@ export async function POST(req: Request) {
       referredPhone,
       consent,
       accessToken,         // opcional (si está logueado)
-      // tracking / campaign (send from client using URL params)
-      camp,
-      utm_source,
-      utm_medium,
-      utm_campaign,
-      utm_term,
-      utm_content,
-      landing_path,
-      referer,
     } = body ?? {};
 
     const referredEmailNorm = normalizeEmail(referredEmail);
     const referredPhoneNorm = normalizePhone(referredPhone);
-
-    const tracking = {
-      camp: cleanTrack(camp, 80),
-      utm_source: cleanTrack(utm_source, 80),
-      utm_medium: cleanTrack(utm_medium, 80),
-      utm_campaign: cleanTrack(utm_campaign, 120),
-      utm_term: cleanTrack(utm_term, 120),
-      utm_content: cleanTrack(utm_content, 120),
-      landing_path: cleanTrack(landing_path, 200),
-      referer: cleanTrack(referer, 300),
-    };
 
     if (!referredName || typeof referredName !== "string") {
       return NextResponse.json({ ok: false, message: "Nombre del referido requerido." }, { status: 400 });
@@ -244,17 +218,8 @@ export async function POST(req: Request) {
         referred_phone: referredPhoneNorm,
         consent: true,
         status: "registered",
-        // tracking
-        camp: tracking.camp,
-        utm_source: tracking.utm_source,
-        utm_medium: tracking.utm_medium,
-        utm_campaign: tracking.utm_campaign,
-        utm_term: tracking.utm_term,
-        utm_content: tracking.utm_content,
-        landing_path: tracking.landing_path,
-        referer: tracking.referer,
       })
-      .select("id, created_at, camp, utm_source, utm_medium, utm_campaign, utm_term, utm_content, landing_path, referer");
+      .select("id, created_at");
 
     const insertError = insertRes.error;
 
@@ -300,16 +265,6 @@ if (insertError) {
     const referralId: string | null = inserted?.id ?? null;
     const createdAt: string = inserted?.created_at ?? new Date().toISOString();
 
-    const insertedTracking = {
-      camp: inserted?.camp ?? tracking.camp,
-      utm_source: inserted?.utm_source ?? tracking.utm_source,
-      utm_medium: inserted?.utm_medium ?? tracking.utm_medium,
-      utm_campaign: inserted?.utm_campaign ?? tracking.utm_campaign,
-      utm_term: inserted?.utm_term ?? tracking.utm_term,
-      utm_content: inserted?.utm_content ?? tracking.utm_content,
-      landing_path: inserted?.landing_path ?? tracking.landing_path,
-      referer: inserted?.referer ?? tracking.referer,
-    };
 
     // Enviar correo informativo al referido
     const resend = new Resend(process.env.RESEND_API_KEY);
@@ -372,14 +327,6 @@ if (insertError) {
             <tr><td><b>Referidor (email)</b></td><td>${escapeHtml(final_referrer_email || "—")}</td></tr>
             <tr><td><b>Consentimiento</b></td><td>${consent === true ? "Sí" : "No"}</td></tr>
             <tr><td><b>Status</b></td><td>registered</td></tr>
-            <tr><td><b>Camp</b></td><td>${escapeHtml(insertedTracking.camp || "—")}</td></tr>
-            <tr><td><b>UTM Source</b></td><td>${escapeHtml(insertedTracking.utm_source || "—")}</td></tr>
-            <tr><td><b>UTM Medium</b></td><td>${escapeHtml(insertedTracking.utm_medium || "—")}</td></tr>
-            <tr><td><b>UTM Campaign</b></td><td>${escapeHtml(insertedTracking.utm_campaign || "—")}</td></tr>
-            <tr><td><b>UTM Term</b></td><td>${escapeHtml(insertedTracking.utm_term || "—")}</td></tr>
-            <tr><td><b>UTM Content</b></td><td>${escapeHtml(insertedTracking.utm_content || "—")}</td></tr>
-            <tr><td><b>Landing</b></td><td>${escapeHtml(insertedTracking.landing_path || "—")}</td></tr>
-            <tr><td><b>Referer</b></td><td>${escapeHtml(insertedTracking.referer || "—")}</td></tr>
           </table>
           <p style="margin:16px 0 0 0; font-size:12px; color:#666;">Enviado automáticamente desde verisure-referidos.</p>
         </div>
