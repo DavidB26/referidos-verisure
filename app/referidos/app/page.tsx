@@ -505,9 +505,9 @@ function getTrackingPayload() {
 
   if (loading) {
     return (
-      <main className="min-h-screen bg-white">
+      <main className="min-h-screen bg-[url('/home/bg-banner-home.webp')] bg-cover bg-center  bg-no-repeat">
         <div className="mx-auto max-w-6xl px-4 py-14">
-          <p className="text-sm text-gray-600">Cargando tu portal…</p>
+          <p className="text-sm text-white">Cargando tu portal…</p>
         </div>
       </main>
     );
@@ -516,19 +516,24 @@ function getTrackingPayload() {
   const isAuthed = !!email;
 
   return (
-    <main className="min-h-screen bg-white">
-      <header className="sticky top-0 z-40 border-b border-gray-100 bg-white/90 backdrop-blur">
-        <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-4">
+    <main className="min-h-screen bg-[url('/home/bg-banner-home.webp')] bg-cover bg-center  bg-no-repeat">
+      <header className="absolute inset-x-0 top-0 z-40">
+        <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-6">
           <Link
             href="/"
-            className="text-sm font-semibold text-gray-900 hover:opacity-90"
+            className="text-sm font-semibold text-white drop-shadow-[0_2px_6px_rgba(0,0,0,0.35)] hover:opacity-90"
           >
             Programa de Referidos
           </Link>
 
-          <div className="flex items-center gap-2">
-            <Button variant="secondary" onClick={load} disabled={refreshing}>
-              <span className="inline-flex items-center gap-2">
+          <div className="flex items-center gap-5 rounded-2xl  p-1 ">
+            <Button
+              variant="secondary"
+              onClick={load}
+              disabled={refreshing}
+              className="border-white/20 bg-white text-white "
+            >
+              <span className="inline-flex items-center gap-2 text-black">
                 <RefreshCw
                   size={16}
                   className={refreshing ? "animate-spin" : ""}
@@ -537,8 +542,12 @@ function getTrackingPayload() {
               </span>
             </Button>
             {isAuthed && (
-              <Button variant="secondary" onClick={logout}>
-                <span className="inline-flex items-center gap-2">
+              <Button
+                variant="secondary"
+                onClick={logout}
+                className="border-white/20 0 text-white "
+              >
+                <span className="inline-flex items-center gap-2 text-black">
                   <LogOut size={16} />
                   Salir
                 </span>
@@ -548,17 +557,17 @@ function getTrackingPayload() {
         </div>
       </header>
 
-      <section className="mx-auto max-w-6xl px-4 py-10">
+      <section className="mx-auto max-w-6xl px-4 pb-10 pt-28 md:pt-32">
         <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">
+            <h1 className="text-4xl font-bold leading-none text-white sm:text-5xl md:text-6xl">
               {isAuthed && greetName ? `Hola, ${greetName}` : "Mis referidos"}
             </h1>
-            <p className="mt-1 text-sm text-gray-600">
+            <p className="mt-2 text-lg leading-relaxed text-white sm:text-2xl md:mt-1 md:text-[2rem]">
               {isAuthed ? (
                 <>
-                  Sesión: <span className="font-medium text-gray-900">{email}</span>
-                  <span className="block mt-1 text-xs text-gray-500">
+                  Sesión: <span className="font-medium text-white">{email}</span>
+                  <span className="mt-2 block text-sm leading-relaxed text-white sm:text-base md:mt-1 md:text-[1rem]">
                     Revisa tus referidos y el estado en el que van avanzando.
                   </span>
                 </>
@@ -573,10 +582,10 @@ function getTrackingPayload() {
               type="button"
               onClick={openRegisterModal}
               disabled={isInCooldown}
-              className={`inline-flex items-center justify-center rounded-xl px-5 py-3 text-sm font-semibold shadow-sm transition-all ${
+              className={`inline-flex items-center justify-center rounded-xl px-4 py-3 text-sm font-semibold shadow-sm transition-all sm:px-5 ${
                 isInCooldown
-                  ? "bg-gray-300 text-gray-700 cursor-not-allowed"
-                  : "bg-brand text-white hover:opacity-95 active:scale-[0.99]"
+                  ? "bg-[#00A47C] text-gray-700 cursor-not-allowed"
+                  : "bg-[#00A47C] text-white hover:opacity-95 active:scale-[0.99]"
               }`}
             >
               {isInCooldown ? `Espera ${formatCooldown(cooldownRemainingMs)}` : "Registrar nuevo referido"}
@@ -603,58 +612,78 @@ function getTrackingPayload() {
           <>
             <div className="mt-8 grid grid-cols-1 gap-4 md:grid-cols-3">
               <div className="rounded-2xl border border-gray-100 bg-gray-50 p-5">
-                <p className="text-xs text-gray-500">Total referidos</p>
-                <p className="mt-1 text-2xl font-bold text-gray-900">{total}</p>
+                <p className="text-base text-gray-500 sm:text-lg md:text-xl">Total referidos</p>
+                <p className="mt-2 text-3xl font-bold leading-none text-gray-900 sm:text-4xl md:text-5xl">{total}</p>
               </div>
               <div className="rounded-2xl border border-gray-100 bg-gray-50 p-5">
-                <p className="text-xs text-gray-500">Último registro</p>
-                <p className="mt-1 text-sm font-semibold text-gray-900">
+                <p className="text-base text-gray-500 sm:text-lg md:text-xl">Último registro</p>
+                <p className="mt-2 text-lg font-semibold leading-tight text-gray-900 sm:text-xl md:text-2xl">
                   {rows[0] ? statusUi[rows[0].status].label : "—"}
                 </p>
-                <p className="mt-1 text-xs text-gray-500">
+                <p className="mt-2 text-base text-gray-500 sm:text-lg md:text-xl">
                   {rows[0] ? formatDate(rows[0].created_at) : "—"}
                 </p>
               </div>
               <div className="rounded-2xl border border-gray-100 bg-gray-50 p-5">
-                <p className="text-xs text-gray-500">Nota</p>
-                <p className="mt-1 text-sm text-gray-700">
+                <p className="text-base text-gray-500 sm:text-lg md:text-xl">Nota</p>
+                <p className="mt-2 text-base leading-relaxed text-gray-700 sm:text-lg md:text-xl">
                   Los estados se actualizarán cuando el flujo comercial avance.
                 </p>
               </div>
             </div>
-            <div className="mt-4 rounded-2xl border border-gray-100 bg-white p-5">
-              <div className="flex items-start justify-between gap-4">
-                <div>
-                  <p className="text-sm font-semibold text-gray-900">Mis premios</p>
-                  <p className="mt-1 text-xs text-gray-500">
-                    {firstName ? (
-                      <>
-                        {firstName}, aquí verás tus premios disponibles cuando tus referidos avancen en el programa.
-                      </>
-                    ) : (
-                      <>Aquí verás tus premios disponibles cuando tus referidos avancen en el programa.</>
-                    )}
-                  </p>
-                </div>
-                <span className="inline-flex items-center gap-2 rounded-xl border border-gray-200 bg-gray-50 px-3 py-1 text-xs text-gray-700">
-                  Próximamente
-                </span>
+            <div className="relative mt-8 overflow-hidden rounded-[34px] px-4 pt-8 pb-6 text-white md:px-8 md:pt-10 md:pb-8 lg:px-12 lg:pt-12 lg:pb-10">
+              <img
+                src="/referidos/persona1.webp"
+                alt=""
+                aria-hidden="true"
+                className="pointer-events-none absolute left-[-10px] top-[122px] z-20 hidden w-[135px] max-w-none md:block md:w-[190px] lg:left-[-6px] lg:top-[150px] lg:w-[245px] xl:left-0 xl:top-[158px] xl:w-[285px]"
+              />
+              <img
+                src="/referidos/persona2.webp"
+                alt=""
+                aria-hidden="true"
+                className="pointer-events-none absolute right-[-10px] top-[130px] z-20 hidden w-[135px] max-w-none md:block md:w-[190px] lg:right-[-6px] lg:top-[130px] lg:w-[245px] xl:right-0 xl:top-[230px] xl:w-[285px]"
+              />
+              <div className="relative z-10 text-center md:px-10 lg:px-16">
+                <h2 className="text-[28px] font-extrabold leading-none text-transparent [text-shadow:none] [-webkit-text-stroke:1.5px_white] sm:text-[34px] md:text-[72px] md:[-webkit-text-stroke:3px_white]">
+                  Mis premios
+                </h2>
+                <p className="mx-auto mt-4 max-w-5xl text-sm leading-relaxed text-white/95 sm:text-base md:mt-6 md:text-[2rem] md:leading-snug">
+                  {firstName ? (
+                    <>
+                      {firstName}, aquí verás tus premios disponibles cuando tus referidos avancen en el programa.
+                    </>
+                  ) : (
+                    <>Aquí verás tus premios disponibles cuando tus referidos avancen en el programa.</>
+                  )}
+                </p>
               </div>
 
-              <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-3">
-                <div className="rounded-2xl border border-gray-100 bg-gray-50 p-4">
-                  <p className="text-xs text-gray-500">Canjeables</p>
-                  <p className="mt-1 text-xl font-bold text-gray-900">0</p>
-                  <p className="mt-1 text-xs text-gray-500">Aún no tienes premios habilitados.</p>
+              <div className="relative z-10 mt-12 rounded-[34px] border-[3px] border-white bg-transparent px-6 py-8 shadow-[0_0_24px_rgba(255,255,255,0.45)] md:mt-14 md:px-10 md:py-10 md:mx-16 lg:mt-16 lg:mx-24 xl:mx-28">
+                <div className="text-center">
+                  <p className="text-xl font-extrabold sm:text-2xl md:text-4xl">Canjeables</p>
+                  <p className="mt-2 text-5xl font-black leading-none sm:text-6xl md:text-7xl">0</p>
+                  <p className="mt-3 text-xl font-extrabold leading-tight sm:text-2xl md:text-4xl">
+                    Aún no tienes premios habilitados
+                  </p>
                 </div>
-                <div className="rounded-2xl border border-gray-100 bg-gray-50 p-4 md:col-span-2">
-                  <p className="text-xs font-semibold text-gray-900">¿Cómo se habilitan?</p>
-                  <ul className="mt-2 space-y-1 text-xs text-gray-600">
-                    <li className="flex gap-2"><span className="text-gray-400">•</span><span>Tus referidos avanzan por estados: <span className="font-medium text-gray-800">Registrado → Contactado → Cotización → Contratado</span>.</span></li>
-                    <li className="flex gap-2"><span className="text-gray-400">•</span><span>Cuando un referido llegue a <span className="font-medium text-gray-800">Contratado</span>, se habilita tu premio según la campaña vigente.</span></li>
-                    <li className="flex gap-2"><span className="text-gray-400">•</span><span>El canje se activará en esta misma sección cuando el proceso esté habilitado.</span></li>
-                  </ul>
-                </div>
+              </div>
+
+              <div className="relative z-10 mt-10 rounded-[34px] border-white/90 bg-transparent px-5 py-8 md:px-8 md:py-10 md:mx-10 lg:mx-16 xl:mx-20">
+                <h3 className="text-center text-xl font-extrabold sm:text-2xl md:text-4xl">
+                  ¿Cómo se habilitan?
+                </h3>
+                <ul className="mx-auto mt-5 max-w-5xl space-y-2 text-center text-sm leading-relaxed text-white/95 sm:text-base md:mt-6 md:text-2xl md:leading-snug">
+                  <li>
+                    • Tus referidos avanzan por estados: Registrado → Contactado → Cotización → Contratado.
+                  </li>
+                  <li>
+                    • Cuando un referido llegue a Contratado, se habilita tu premio según la campaña vigente.
+                  </li>
+                  <li>
+                    • El canje se activará en esta misma sección cuando el proceso esté habilitado.
+                  </li>
+                </ul>
               </div>
             </div>
           </>
@@ -667,59 +696,59 @@ function getTrackingPayload() {
         )}
 
         {isAuthed && (
-          <div className="mt-8 overflow-hidden rounded-2xl border border-gray-100">
-            <div className="border-b border-gray-100 bg-white px-5 py-4">
-              <p className="text-sm font-semibold text-gray-900">Historial</p>
-              <p className="mt-1 text-xs text-gray-500">
+          <div className="mt-10 overflow-hidden rounded-[34px] border border-white/70 bg-white/95 shadow-[0_18px_50px_rgba(0,0,0,0.12)] backdrop-blur-sm">
+            <div className="border-b border-gray-200 bg-white px-6 py-6 md:px-8 md:py-7">
+              <p className="text-xl font-bold text-gray-900 sm:text-2xl md:text-4xl">Historial</p>
+              <p className="mt-2 text-sm leading-relaxed text-gray-500 sm:text-base md:text-xl">
                 Se muestran los últimos registros primero.
               </p>
             </div>
 
             {rows.length === 0 ? (
-              <div className="bg-white px-5 py-10 text-sm text-gray-600">
+              <div className="bg-white px-6 py-12 text-lg text-gray-600 md:px-8 md:text-2xl">
                 Aún no tienes referidos registrados. Usa el botón
-                <span className="font-semibold text-gray-900"> "Registrar nuevo referido"</span>
+                <span className="font-bold text-gray-900"> "Registrar nuevo referido"</span>
                 para crear el primero.
               </div>
             ) : (
-              <ul className="divide-y divide-gray-100 bg-white">
+              <ul className="divide-y divide-gray-200 bg-white">
                 {rows.map((r) => {
                   const ui = statusUi[r.status];
                   return (
-                    <li key={r.id} className="px-5 py-4">
-                      <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                    <li key={r.id} className="px-6 py-6 md:px-8 md:py-7">
+                      <div className="flex flex-col gap-5 md:flex-row md:items-start md:justify-between">
                         <div>
-                          <p className="text-sm font-semibold text-gray-900 inline-flex items-center gap-2">
-                            <User size={16} className="text-gray-400" />
+                          <p className="inline-flex items-center gap-3 text-xl font-bold text-gray-900 sm:text-2xl md:text-3xl">
+                            <User size={22} className="text-gray-400" />
                             {r.referred_name}
                           </p>
-                          <div className="mt-2 grid grid-cols-1 gap-2 text-xs text-gray-600 sm:grid-cols-2">
+                          <div className="mt-3 grid grid-cols-1 gap-2 text-sm text-gray-600 sm:mt-4 sm:text-base md:text-xl sm:grid-cols-2">
                             <p className="inline-flex items-center gap-2">
-                              <Phone size={14} className="text-gray-400" />
+                              <Phone size={20} className="text-gray-400" />
                               {r.referred_phone}
                             </p>
                             {r.referred_email && (
                               <p className="inline-flex items-center gap-2">
-                                <Mail size={14} className="text-gray-400" />
+                                <Mail size={20} className="text-gray-400" />
                                 {r.referred_email}
                               </p>
                             )}
-                            <p className="sm:col-span-2 inline-flex items-center gap-2 text-gray-500">
-                              <Clock size={14} className="text-gray-400" />
+                            <p className="sm:col-span-2 inline-flex items-center gap-3 text-gray-500">
+                              <Clock size={20} className="text-gray-400" />
                               <span>{formatDate(r.created_at)}</span>
                             </p>
                           </div>
                         </div>
 
-                        <div className="flex flex-col items-start gap-2 md:items-end">
+                        <div className="flex flex-col items-start gap-3 md:items-end">
                           <span
-                            className={`inline-flex items-center gap-2 rounded-xl border px-3 py-1 text-xs ${ui.cls}`}
+                            className={`inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-semibold sm:px-5 sm:text-base md:px-6 md:py-3 md:text-xl ${ui.cls}`}
                           >
                             {ui.icon}
                             {ui.label}
                           </span>
                           {!r.consent && (
-                            <span className="text-xs text-red-600">
+                            <span className="text-sm font-medium text-red-600 md:text-base">
                               Sin consentimiento
                             </span>
                           )}
@@ -733,7 +762,7 @@ function getTrackingPayload() {
           </div>
         )}
 
-        <p className="mt-10 text-xs text-gray-500">
+        <p className="mt-10 text-xs leading-relaxed text-white sm:text-sm">
           *Aplican términos y condiciones del programa.
         </p>
       {/* Modal para registrar referido */}
