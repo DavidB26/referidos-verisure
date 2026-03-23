@@ -106,8 +106,10 @@ export default function Page() {
 
           <div
             className={[
-              "hidden h-[82px] flex-1 items-stretch overflow-hidden rounded-full shadow-[0_4px_18px_rgba(22,22,22,0.12)] lg:flex",
-              isHeaderScrolled ? "bg-[#F3F3F3]" : "bg-[#F3F3F3]",
+              "hidden h-[82px] flex-1 items-stretch overflow-hidden rounded-full lg:flex transition-all duration-300",
+              isHeaderScrolled
+                ? "bg-transparent shadow-none"
+                : "bg-[#F3F3F3] shadow-[0_4px_18px_rgba(22,22,22,0.12)]",
             ].join(" ")}
           >
             <nav className="flex h-full items-stretch">
