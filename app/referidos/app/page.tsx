@@ -515,9 +515,9 @@ function normalizeDni(val: string) {
               type="button"
               onClick={openRegisterModal}
               disabled={isInCooldown}
-              className={`inline-flex items-center justify-center rounded-xl px-4 py-3 text-sm font-semibold shadow-sm transition-all sm:px-5 ${
+              className={`inline-flex items-center justify-center rounded-xl px-4 py-3 text-xl font-semibold shadow-sm transition-all sm:px-5 ${
                 isInCooldown
-                  ? "bg-[#00A47C] text-gray-700 cursor-not-allowed"
+                  ? "bg-[#00A47C] text-white cursor-not-allowed"
                   : "bg-[#00A47C] text-white hover:opacity-95 active:scale-[0.99]"
               }`}
             >

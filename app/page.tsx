@@ -172,12 +172,12 @@ export default function Page() {
       <section className="relative overflow-hidden bg-transparent">
         <div className="mx-auto grid max-w-[1720px] grid-cols-1 gap-8 px-4 py-10 md:grid-cols-[0.65fr_0.35fr] md:items-center md:gap-6 md:px-8 md:py-12">
           {/* Copy */}
-          <div className="animate-fade-up flex items-center justify-center md:justify-start">
+          <div className="animate-fade-up flex items-center justify-center">
             <Image
               src="/home/img-referido.webp"
-              width={1900}
-              height={980}
-              className="h-auto w-full max-w-[1180px] object-contain md:max-w-[1000px]"
+              width={1500}
+              height={1062}
+              className="mx-auto h-auto w-full object-contain object-center"
               alt="Registra a tu referido"
               priority
             />
