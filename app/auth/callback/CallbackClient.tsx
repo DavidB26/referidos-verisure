@@ -20,7 +20,7 @@ export default function AuthCallback() {
       const nextParam = params.get("next");
       const safeNext = nextParam?.startsWith("/")
         ? nextParam
-        : "/referidos/app";
+        : "/referidos";
 
       const code = params.get("code");
       const tokenHash = params.get("token_hash");

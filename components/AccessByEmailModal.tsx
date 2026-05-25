@@ -95,7 +95,7 @@ export default function AccessByEmailModal({ open, onClose, source }: Props) {
 
       if (data?.session) {
         onClose(); // cierra modal
-        router.replace("/referidos/app");
+        router.replace("/referidos");
         return;
       }
 
